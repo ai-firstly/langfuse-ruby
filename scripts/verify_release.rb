@@ -5,7 +5,7 @@ require 'net/http'
 require 'json'
 require 'uri'
 
-puts "🔍 Verifying Langfuse Ruby SDK release..."
+puts '🔍 Verifying Langfuse Ruby SDK release...'
 
 # Get current version
 require_relative '../lib/langfuse/version'
@@ -22,7 +22,7 @@ def check_rubygems(gem_name, version)
 
     if response.code == '200'
       data = JSON.parse(response.body)
-      puts "✅ Gem found on RubyGems:"
+      puts '✅ Gem found on RubyGems:'
       puts "   Name: #{data['name']}"
       puts "   Version: #{data['version']}"
       puts "   Downloads: #{data['downloads']}"
@@ -31,19 +31,19 @@ def check_rubygems(gem_name, version)
       puts "   Source: #{data['source_code_uri']}"
 
       if data['version'] == version
-        puts "✅ Version matches current version"
+        puts '✅ Version matches current version'
       else
         puts "⚠️  Version mismatch: Expected #{version}, found #{data['version']}"
       end
 
-      return true
+      true
     else
       puts "❌ Gem not found on RubyGems (HTTP #{response.code})"
-      return false
+      false
     end
-  rescue => e
+  rescue StandardError => e
     puts "❌ Error checking RubyGems: #{e.message}"
-    return false
+    false
   end
 end
 
@@ -60,19 +60,19 @@ def check_version_availability(gem_name, version)
 
       if version_found
         puts "✅ Version #{version} is available on RubyGems"
-        return true
+        true
       else
         puts "❌ Version #{version} not found on RubyGems"
         puts "   Available versions: #{versions.map { |v| v['number'] }.join(', ')}"
-        return false
+        false
       end
     else
       puts "❌ Could not fetch version list (HTTP #{response.code})"
-      return false
+      false
     end
-  rescue => e
+  rescue StandardError => e
     puts "❌ Error checking version availability: #{e.message}"
-    return false
+    false
   end
 end
 
@@ -89,16 +89,16 @@ begin
   require_relative '../lib/langfuse'
 
   # Test basic functionality
-  puts "✅ Langfuse module loaded successfully"
+  puts '✅ Langfuse module loaded successfully'
   puts "   Version: #{Langfuse::VERSION}"
 
   # Test client creation (without real credentials)
   begin
     client = Langfuse.new(public_key: 'test', secret_key: 'test')
-    puts "✅ Client creation successful"
+    puts '✅ Client creation successful'
   rescue Langfuse::AuthenticationError
-    puts "✅ Authentication error expected (no real credentials)"
-  rescue => e
+    puts '✅ Authentication error expected (no real credentials)'
+  rescue StandardError => e
     puts "❌ Unexpected error creating client: #{e.message}"
   end
 
@@ -107,14 +107,13 @@ begin
     config.public_key = 'test'
     config.secret_key = 'test'
   end
-  puts "✅ Configuration successful"
+  puts '✅ Configuration successful'
 
   # Test utilities
   id = Langfuse::Utils.generate_id
   timestamp = Langfuse::Utils.current_timestamp
   puts "✅ Utilities working (ID: #{id[0..7]}..., Timestamp: #{timestamp})"
-
-rescue => e
+rescue StandardError => e
   puts "❌ Error testing local functionality: #{e.message}"
 end
 
@@ -122,19 +121,19 @@ end
 puts "\n📊 Verification Summary:"
 puts "   Gem available on RubyGems: #{gem_available ? '✅' : '❌'}"
 puts "   Version available: #{version_available ? '✅' : '❌'}"
-puts "   Local functionality: ✅"
+puts '   Local functionality: ✅'
 
 if gem_available && version_available
   puts "\n🎉 Release verification successful!"
-  puts "   Your gem is ready for use!"
+  puts '   Your gem is ready for use!'
   puts "\n📝 Installation command:"
-  puts "   gem install langfuse"
+  puts '   gem install langfuse-ruby'
 else
   puts "\n⚠️  Release verification incomplete"
-  puts "   Please check the issues above"
+  puts '   Please check the issues above'
 end
 
 puts "\n🔗 Useful links:"
-puts "   - RubyGems page: https://rubygems.org/gems/langfuse"
-puts "   - Documentation: https://github.com/your-username/langfuse-ruby"
-puts "   - Issues: https://github.com/your-username/langfuse-ruby/issues"
+puts '   - RubyGems page: https://rubygems.org/gems/langfuse'
+puts '   - Documentation: https://github.com/ai-firstly/langfuse-ruby'
+puts '   - Issues: https://github.com/ai-firstly/langfuse-ruby/issues'

@@ -116,5 +116,5 @@ echo "  3. Announce the release"
 echo
 echo "🔗 Useful links:"
 echo "  - RubyGems: https://rubygems.org/gems/langfuse"
-echo "  - GitHub: https://github.com/your-username/langfuse-ruby"
-echo "  - Documentation: https://github.com/your-username/langfuse-ruby#readme" 
+echo "  - GitHub: https://github.com/ai-firstly/langfuse-ruby"
+echo "  - Documentation: https://github.com/ai-firstly/langfuse-ruby#readme" 

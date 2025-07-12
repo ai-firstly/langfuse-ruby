@@ -61,7 +61,7 @@ module Langfuse
     def text_to_langchain_prompt
       # Convert text prompt to LangChain PromptTemplate format
       {
-        _type: "prompt",
+        _type: 'prompt',
         input_variables: extract_variables(@prompt),
         template: @prompt
       }
@@ -78,7 +78,7 @@ module Langfuse
       end
 
       {
-        _type: "chat",
+        _type: 'chat',
         messages: messages,
         input_variables: messages.flat_map { |m| m[:input_variables] }.uniq
       }

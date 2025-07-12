@@ -1,7 +1,7 @@
 # Langfuse Ruby SDK
 
-[![Gem Version](https://badge.fury.io/rb/langfuse.svg)](https://badge.fury.io/rb/langfuse)
-[![Build Status](https://github.com/your-username/langfuse-ruby/workflows/CI/badge.svg)](https://github.com/your-username/langfuse-ruby/actions)
+[![Gem Version](https://badge.fury.io/rb/langfuse-ruby.svg)](https://badge.fury.io/rb/langfuse-ruby)
+[![Build Status](https://github.com/ai-firstly/langfuse-ruby/workflows/CI/badge.svg)](https://github.com/ai-firstly/langfuse-ruby/actions)
 
 Ruby SDK for [Langfuse](https://langfuse.com) - the open-source LLM engineering platform. This SDK provides comprehensive tracing, prompt management, and evaluation capabilities for LLM applications.
 
@@ -19,7 +19,7 @@ Ruby SDK for [Langfuse](https://langfuse.com) - the open-source LLM engineering 
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'langfuse'
+gem 'langfuse-ruby'
 ```
 
 And then execute:
@@ -31,7 +31,7 @@ $ bundle install
 Or install it yourself as:
 
 ```bash
-$ gem install langfuse
+$ gem install langfuse-ruby
 ```
 
 ## Quick Start
@@ -422,7 +422,7 @@ For an interactive prompt that will allow you to experiment.
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/your-username/langfuse-ruby.
+Bug reports and pull requests are welcome on GitHub at https://github.com/ai-firstly/langfuse-ruby.
 
 ## License
 
@@ -433,4 +433,4 @@ The gem is available as open source under the terms of the [MIT License](https:/
 - [Langfuse Documentation](https://langfuse.com/docs)
 - [Langfuse GitHub](https://github.com/langfuse/langfuse)
 - [API Reference](https://api.reference.langfuse.com)
-- [Ruby SDK Documentation](https://rubydoc.info/gems/langfuse) 
+- [Ruby SDK Documentation](https://rubydoc.info/gems/langfuse-ruby) 

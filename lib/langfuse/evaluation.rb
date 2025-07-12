@@ -67,7 +67,7 @@ module Langfuse
       end
 
       def evaluate(input, output, expected: nil, context: nil)
-        raise NotImplementedError, "Subclasses must implement evaluate method"
+        raise NotImplementedError, 'Subclasses must implement evaluate method'
       end
 
       protected
@@ -129,7 +129,7 @@ module Langfuse
         length = output.to_s.length
 
         if @min_length && @max_length
-          score = (length >= @min_length && length <= @max_length) ? 1 : 0
+          score = length >= @min_length && length <= @max_length ? 1 : 0
           comment = score == 1 ? "Length #{length} within range" : "Length #{length} outside range #{@min_length}-#{@max_length}"
         elsif @min_length
           score = length >= @min_length ? 1 : 0
@@ -151,7 +151,7 @@ module Langfuse
     end
 
     class RegexEvaluator < BaseEvaluator
-      def initialize(name: 'regex', description: 'Regex evaluator', pattern:)
+      def initialize(pattern:, name: 'regex', description: 'Regex evaluator')
         super(name: name, description: description)
         @pattern = pattern.is_a?(Regexp) ? pattern : Regexp.new(pattern)
       end
@@ -205,11 +205,11 @@ module Langfuse
 
         (1..str1.length).each do |i|
           (1..str2.length).each do |j|
-            cost = str1[i-1] == str2[j-1] ? 0 : 1
+            cost = str1[i - 1] == str2[j - 1] ? 0 : 1
             matrix[i][j] = [
-              matrix[i-1][j] + 1,     # deletion
-              matrix[i][j-1] + 1,     # insertion
-              matrix[i-1][j-1] + cost # substitution
+              matrix[i - 1][j] + 1,     # deletion
+              matrix[i][j - 1] + 1,     # insertion
+              matrix[i - 1][j - 1] + cost # substitution
             ].min
           end
         end
@@ -219,7 +219,8 @@ module Langfuse
     end
 
     class LLMEvaluator < BaseEvaluator
-      def initialize(name: 'llm_evaluator', description: 'LLM-based evaluator', client:, model: 'gpt-3.5-turbo', prompt_template: nil)
+      def initialize(client:, name: 'llm_evaluator', description: 'LLM-based evaluator', model: 'gpt-3.5-turbo',
+                     prompt_template: nil)
         super(name: name, description: description)
         @client = client
         @model = model

@@ -64,7 +64,7 @@ git push origin v0.1.0
 ### 2. 测试安装
 ```bash
 # 从 RubyGems 安装
-gem install langfuse
+gem install langfuse-ruby
 
 # 测试基本功能
 ruby -e "require 'langfuse'; puts Langfuse::VERSION"

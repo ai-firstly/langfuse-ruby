@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    langfuse (0.1.0)
+    langfuse-ruby (0.1.2)
       concurrent-ruby (~> 1.0)
       faraday (~> 2.0)
       faraday-net_http (~> 3.0)
@@ -90,7 +90,7 @@ PLATFORMS
 
 DEPENDENCIES
   bundler (~> 2.0)
-  langfuse!
+  langfuse-ruby!
   rake (~> 13.0)
   rspec (~> 3.0)
   rubocop (~> 1.21)

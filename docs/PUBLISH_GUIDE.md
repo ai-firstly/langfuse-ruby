@@ -30,10 +30,10 @@ git add .
 git commit -m "Initial commit: Langfuse Ruby SDK v0.1.0"
 
 # 添加远程仓库（替换为您的 GitHub 仓库）
-git remote add origin https://github.com/your-username/langfuse-ruby.git
+git remote add origin https://github.com/ai-firstly/langfuse-ruby.git
 
 # 推送到 GitHub
-git push -u origin main
+git push -u origin master
 ```
 
 ### 3. 创建 GitHub 仓库
@@ -50,7 +50,7 @@ git push -u origin main
 
 ```bash
 # 构建 gem
-gem build langfuse.gemspec
+gem build langfuse-ruby.gemspec
 
 # 检查构建结果
 ls -la *.gem
@@ -60,13 +60,13 @@ ls -la *.gem
 
 ```bash
 # 本地安装构建的 gem
-gem install ./langfuse-0.1.0.gem
+gem install ./langfuse-ruby-0.1.0.gem
 
 # 测试安装是否成功
 ruby -e "require 'langfuse'; puts 'Langfuse loaded successfully'"
 
 # 卸载本地测试版本
-gem uninstall langfuse
+gem uninstall langfuse-ruby
 ```
 
 ### 3. 运行完整测试
@@ -108,10 +108,10 @@ chmod 0600 ~/.gem/credentials
 
 ```bash
 # 构建最新版本
-gem build langfuse.gemspec
+gem build langfuse-ruby.gemspec
 
 # 发布到 RubyGems
-gem push langfuse-0.1.0.gem
+gem push langfuse-ruby-0.1.x.gem
 ```
 
 ## 📊 发布后验证
@@ -123,7 +123,7 @@ gem push langfuse-0.1.0.gem
 gem search langfuse
 
 # 从 RubyGems 安装
-gem install langfuse
+gem install langfuse-ruby
 
 # 测试功能
 ruby -e "

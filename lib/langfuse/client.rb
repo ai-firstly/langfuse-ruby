@@ -16,8 +16,8 @@ module Langfuse
       @timeout = timeout || Langfuse.configuration.timeout
       @retries = retries || Langfuse.configuration.retries
 
-      raise AuthenticationError, "Public key is required" unless @public_key
-      raise AuthenticationError, "Secret key is required" unless @secret_key
+      raise AuthenticationError, 'Public key is required' unless @public_key
+      raise AuthenticationError, 'Secret key is required' unless @secret_key
 
       @connection = build_connection
       @event_queue = Concurrent::Array.new
@@ -95,16 +95,31 @@ module Langfuse
     def get_prompt(name, version: nil, label: nil, cache_ttl_seconds: 60)
       cache_key = "prompt:#{name}:#{version}:#{label}"
 
-      if cached_prompt = @prompt_cache&.dig(cache_key)
-        return cached_prompt[:prompt] if Time.now - cached_prompt[:cached_at] < cache_ttl_seconds
+      if (cached_prompt = @prompt_cache&.dig(cache_key)) && (Time.now - cached_prompt[:cached_at] < cache_ttl_seconds)
+        return cached_prompt[:prompt]
       end
 
-      path = "/api/public/prompts/#{name}"
+      path = "/api/public/v2/prompts/#{name}"
       params = {}
       params[:version] = version if version
       params[:label] = label if label
 
+      puts "Making request to: #{@host}#{path} with params: #{params}" if @debug
+
       response = get(path, params)
+
+      puts "Response status: #{response.status}" if @debug
+      puts "Response headers: #{response.headers}" if @debug
+      puts "Response body type: #{response.body.class}" if @debug
+
+      # Check if response body is a string (HTML) instead of parsed JSON
+      if response.body.is_a?(String) && response.body.include?('<!DOCTYPE html>')
+        puts 'Received HTML response instead of JSON:' if @debug
+        puts response.body[0..200] if @debug
+        raise APIError,
+              'Received HTML response instead of JSON. This usually indicates a 404 error or incorrect API endpoint.'
+      end
+
       prompt = Prompt.new(response.body)
 
       # Cache the prompt
@@ -123,12 +138,12 @@ module Langfuse
         **kwargs
       }
 
-      response = post("/api/public/prompts", data)
+      response = post('/api/public/v2/prompts', data)
       Prompt.new(response.body)
     end
 
     # Score/Evaluation operations
-    def score(trace_id: nil, observation_id: nil, name:, value:, data_type: nil, comment: nil, **kwargs)
+    def score(name:, value:, trace_id: nil, observation_id: nil, data_type: nil, comment: nil, **kwargs)
       data = {
         name: name,
         value: value,
@@ -187,15 +202,15 @@ module Langfuse
         batch: events,
         metadata: {
           batch_size: events.length,
-          sdk_name: "langfuse-ruby",
+          sdk_name: 'langfuse-ruby',
           sdk_version: Langfuse::VERSION
         }
       }
 
       begin
-        response = post("/api/public/ingestion", batch_data)
+        response = post('/api/public/ingestion', batch_data)
         puts "Flushed #{events.length} events" if @debug
-      rescue => e
+      rescue StandardError => e
         puts "Failed to flush events: #{e.message}" if @debug
         # Re-queue events on failure
         events.each { |event| @event_queue << event }
@@ -212,11 +227,24 @@ module Langfuse
 
     def build_connection
       Faraday.new(url: @host) do |conn|
-        conn.request :authorization, :basic, @public_key, @secret_key
+        # 配置请求和响应处理
         conn.request :json
         conn.response :json, content_type: /\bjson$/
-        conn.adapter Faraday.default_adapter
+
+        # 设置 User-Agent 头部
+        conn.headers['User-Agent'] = "langfuse-ruby/#{Langfuse::VERSION}"
+        # 根据 Langfuse 文档配置 Basic Auth
+        # username: Langfuse Public Key, password: Langfuse Secret Key
+        conn.headers['Authorization'] = "Basic #{Base64.strict_encode64("#{@public_key}:#{@secret_key}")}"
+
+        # 设置超时
         conn.options.timeout = @timeout
+
+        # 添加调试日志
+        conn.response :logger if @debug
+
+        # 使用默认适配器
+        conn.adapter Faraday.default_adapter
       end
     end
 
@@ -236,29 +264,40 @@ module Langfuse
       rescue Faraday::ConnectionFailed => e
         if retries_left > 0
           retries_left -= 1
-          sleep(2 ** (@retries - retries_left))
+          sleep(2**(@retries - retries_left))
           retry
         end
         raise NetworkError, "Connection failed: #{e.message}"
-      rescue => e
+      rescue StandardError => e
         raise APIError, "Request failed: #{e.message}"
       end
     end
 
     def handle_response(response)
+      puts "Handling response with status: #{response.status}" if @debug
+
       case response.status
       when 200..299
         response
       when 401
         raise AuthenticationError, "Authentication failed: #{response.body}"
+      when 404
+        # 404 错误通常返回 HTML 页面
+        error_message = 'Resource not found (404)'
+        if response.body.is_a?(String) && response.body.include?('<!DOCTYPE html>')
+          error_message += '. Server returned HTML page instead of JSON API response. This usually means the requested resource does not exist.'
+        else
+          error_message += ": #{response.body}"
+        end
+        raise ValidationError, error_message
       when 429
         raise RateLimitError, "Rate limit exceeded: #{response.body}"
       when 400..499
-        raise ValidationError, "Client error: #{response.body}"
+        raise ValidationError, "Client error (#{response.status}): #{response.body}"
       when 500..599
-        raise APIError, "Server error: #{response.body}"
+        raise APIError, "Server error (#{response.status}): #{response.body}"
       else
-        raise APIError, "Unexpected response: #{response.status} #{response.body}"
+        raise APIError, "Unexpected response (#{response.status}): #{response.body}"
       end
     end
 
@@ -268,7 +307,7 @@ module Langfuse
           sleep(5) # Flush every 5 seconds
           begin
             flush unless @event_queue.empty?
-          rescue => e
+          rescue StandardError => e
             puts "Error in flush thread: #{e.message}" if @debug
           end
         end
