@@ -26,10 +26,32 @@ module Langfuse
         return hash unless hash.is_a?(Hash)
 
         hash.each_with_object({}) do |(key, value), result|
-          new_key = key.to_s
+          new_key = camelize_key(key.to_s)
           new_value = value.is_a?(Hash) ? deep_stringify_keys(value) : value
           result[new_key] = new_value
         end
+      end
+
+      # 将哈希的键名转换为小驼峰格式
+      def deep_camelize_keys(hash)
+        return hash unless hash.is_a?(Hash)
+
+        hash.each_with_object({}) do |(key, value), result|
+          new_key = camelize_key(key.to_s)
+          new_value = value.is_a?(Hash) ? deep_camelize_keys(value) : value
+          result[new_key] = new_value
+        end
+      end
+
+      private
+
+      # 将蛇形命名转换为小驼峰命名
+      def camelize_key(key)
+        return key if key.empty? || !key.include?('_')
+
+        key.split('_').map.with_index do |part, index|
+          index.zero? ? part.downcase : part.capitalize
+        end.join
       end
 
       def validate_required_fields(data, required_fields)

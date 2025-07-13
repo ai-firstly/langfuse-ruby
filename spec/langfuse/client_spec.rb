@@ -96,4 +96,103 @@ RSpec.describe Langfuse::Client do
       client.flush
     end
   end
+
+  describe 'auto_flush configuration' do
+    it 'enables auto_flush by default' do
+      client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret'
+      )
+
+      expect(client.auto_flush).to be true
+      expect(client.instance_variable_get(:@flush_thread)).not_to be_nil
+    end
+
+    it 'disables auto_flush when explicitly set to false' do
+      client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret',
+        auto_flush: false
+      )
+
+      expect(client.auto_flush).to be false
+      expect(client.instance_variable_get(:@flush_thread)).to be_nil
+    end
+
+    it 'respects global configuration for auto_flush' do
+      Langfuse.configure do |config|
+        config.auto_flush = false
+      end
+
+      client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret'
+      )
+
+      expect(client.auto_flush).to be false
+      expect(client.instance_variable_get(:@flush_thread)).to be_nil
+
+      # Reset configuration
+      Langfuse.configure do |config|
+        config.auto_flush = true
+      end
+    end
+
+    it 'respects environment variable for auto_flush' do
+      ENV['LANGFUSE_AUTO_FLUSH'] = 'false'
+
+      client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret'
+      )
+
+      expect(client.auto_flush).to be false
+      expect(client.instance_variable_get(:@flush_thread)).to be_nil
+
+      ENV.delete('LANGFUSE_AUTO_FLUSH')
+    end
+
+    it 'parameter overrides environment variable' do
+      ENV['LANGFUSE_AUTO_FLUSH'] = 'false'
+
+      client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret',
+        auto_flush: true
+      )
+
+      expect(client.auto_flush).to be true
+      expect(client.instance_variable_get(:@flush_thread)).not_to be_nil
+
+      ENV.delete('LANGFUSE_AUTO_FLUSH')
+    end
+  end
+
+  describe '#shutdown' do
+    it 'kills flush thread when auto_flush is enabled' do
+      client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret',
+        auto_flush: true
+      )
+
+      flush_thread = client.instance_variable_get(:@flush_thread)
+      expect(flush_thread).to receive(:kill)
+
+      client.shutdown
+    end
+
+    it 'does not kill flush thread when auto_flush is disabled' do
+      client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret',
+        auto_flush: false
+      )
+
+      expect(client.instance_variable_get(:@flush_thread)).to be_nil
+
+      # Should not raise any errors
+      expect { client.shutdown }.not_to raise_error
+    end
+  end
 end

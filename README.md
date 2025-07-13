@@ -10,6 +10,7 @@ Ruby SDK for [Langfuse](https://langfuse.com) - the open-source LLM engineering 
 - 🔍 **Tracing**: Complete observability for LLM applications with traces, spans, and generations
 - 📝 **Prompt Management**: Version control and deployment of prompts with caching
 - 📊 **Evaluation**: Built-in evaluators and custom scoring capabilities
+- 🎯 **Events**: Generic event tracking for custom application events and logging
 - 🚀 **Async Processing**: Background event processing with automatic batching
 - 🔒 **Type Safety**: Comprehensive error handling and validation
 - 🎯 **Framework Integration**: Easy integration with popular Ruby frameworks
@@ -66,7 +67,6 @@ trace = client.trace(
   name: "chat-completion",
   user_id: "user123",
   session_id: "session456",
-  input: { message: "Hello, world!" },
   metadata: { environment: "production" }
 )
 
@@ -75,15 +75,10 @@ generation = trace.generation(
   name: "openai-completion",
   model: "gpt-3.5-turbo",
   input: [{ role: "user", content: "Hello, world!" }],
-  output: { content: "Hello! How can I help you today?" },
-  usage: { prompt_tokens: 10, completion_tokens: 15, total_tokens: 25 },
   model_parameters: { temperature: 0.7, max_tokens: 100 }
 )
 
-# Update trace with final output
-trace.update(
-  output: { response: "Hello! How can I help you today?" }
-)
+generation.end(output: 'Hello! How can I help you today?', usage: { prompt_tokens: 10, completion_tokens: 15, total_tokens: 25 })
 
 # Flush events (optional - happens automatically)
 client.flush
@@ -130,12 +125,40 @@ llm_gen = answer_span.generation(
   input: [
     { role: "system", content: "Answer based on context" },
     { role: "user", content: "What is machine learning?" }
-  ],
-  output: { content: "Machine learning is a subset of AI..." },
-  usage: { prompt_tokens: 50, completion_tokens: 30, total_tokens: 80 }
+  ]
 )
 
-answer_span.end(output: { answer: "Machine learning is a subset of AI..." })
+answer_span.end(output: { answer: "Machine learning is a subset of AI..." }, usage: { prompt_tokens: 50, completion_tokens: 30, total_tokens: 80 })
+```
+
+## Events
+
+Create generic events for custom application events and logging:
+
+```ruby
+# Create events from trace
+event = trace.event(
+  name: "user_action",
+  input: { action: "login", user_id: "123" },
+  output: { success: true },
+  metadata: { ip: "192.168.1.1" }
+)
+
+# Create events from spans or generations
+validation_event = span.event(
+  name: "validation_check",
+  input: { rules: ["required", "format"] },
+  output: { valid: true, warnings: [] }
+)
+
+# Direct event creation
+event = client.event(
+  trace_id: trace.id,
+  name: "audit_log",
+  input: { operation: "data_export" },
+  output: { status: "completed" },
+  level: "INFO"
+)
 ```
 
 ## Prompt Management
@@ -304,7 +327,9 @@ client = Langfuse.new(
   host: "https://your-instance.langfuse.com",
   debug: true,        # Enable debug logging
   timeout: 30,        # Request timeout in seconds
-  retries: 3          # Number of retry attempts
+  retries: 3,         # Number of retry attempts
+  flush_interval: 30, # Event flush interval in seconds (default: 5)
+  auto_flush: true    # Enable automatic flushing (default: true)
 )
 ```
 
@@ -316,6 +341,76 @@ You can also configure the client using environment variables:
 export LANGFUSE_PUBLIC_KEY="pk-lf-..."
 export LANGFUSE_SECRET_KEY="sk-lf-..."
 export LANGFUSE_HOST="https://cloud.langfuse.com"
+export LANGFUSE_FLUSH_INTERVAL=5
+export LANGFUSE_AUTO_FLUSH=true
+```
+
+### Automatic Flush Control
+
+By default, the Langfuse client automatically flushes events to the server at regular intervals using a background thread. You can control this behavior:
+
+#### Enable/Disable Auto Flush
+
+```ruby
+# Enable automatic flushing (default)
+client = Langfuse.new(
+  public_key: "pk-lf-...",
+  secret_key: "sk-lf-...",
+  auto_flush: true,
+  flush_interval: 5  # Flush every 5 seconds
+)
+
+# Disable automatic flushing for manual control
+client = Langfuse.new(
+  public_key: "pk-lf-...",
+  secret_key: "sk-lf-...",
+  auto_flush: false
+)
+
+# Manual flush when auto_flush is disabled
+client.flush
+```
+
+#### Global Configuration
+
+```ruby
+Langfuse.configure do |config|
+  config.auto_flush = false  # Disable auto flush globally
+  config.flush_interval = 10
+end
+```
+
+#### Environment Variable
+
+```bash
+export LANGFUSE_AUTO_FLUSH=false
+```
+
+#### Use Cases
+
+**Auto Flush Enabled (Default)**
+- Best for most applications
+- Events are sent automatically
+- No manual management required
+
+**Auto Flush Disabled**
+- Better performance for batch operations
+- More control over when events are sent
+- Requires manual flush calls
+- Useful for high-frequency operations
+
+```ruby
+# Example: Batch processing with manual flush
+client = Langfuse.new(auto_flush: false)
+
+# Process many items
+1000.times do |i|
+  trace = client.trace(name: "batch-item-#{i}")
+  # ... process item
+end
+
+# Flush all events at once
+client.flush
 ```
 
 ### Shutdown
@@ -356,9 +451,7 @@ class ChatController < ApplicationController
     
     # Your LLM logic here
     response = generate_response(params[:message])
-    
-    trace.update(output: { response: response })
-    
+
     render json: { response: response }
   end
 end
@@ -370,19 +463,17 @@ end
 class LLMProcessingJob < ApplicationJob
   def perform(user_id, message)
     client = Langfuse.new
-    
+
     trace = client.trace(
       name: "background-llm-processing",
       user_id: user_id,
       input: { message: message },
       metadata: { job_class: self.class.name }
     )
-    
+
     # Process with LLM
     result = process_with_llm(message)
-    
-    trace.update(output: result)
-    
+
     # Ensure events are flushed
     client.flush
   end

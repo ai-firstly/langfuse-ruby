@@ -5,6 +5,7 @@ require_relative 'langfuse/client'
 require_relative 'langfuse/trace'
 require_relative 'langfuse/span'
 require_relative 'langfuse/generation'
+require_relative 'langfuse/event'
 require_relative 'langfuse/prompt'
 require_relative 'langfuse/evaluation'
 require_relative 'langfuse/errors'
@@ -30,7 +31,7 @@ module Langfuse
 
   # Configuration class for Langfuse client settings
   class Configuration
-    attr_accessor :public_key, :secret_key, :host, :debug, :timeout, :retries
+    attr_accessor :public_key, :secret_key, :host, :debug, :timeout, :retries, :flush_interval, :auto_flush
 
     def initialize
       @public_key = nil
@@ -39,6 +40,8 @@ module Langfuse
       @debug = false
       @timeout = 30
       @retries = 3
+      @flush_interval = 5
+      @auto_flush = true
     end
   end
 end

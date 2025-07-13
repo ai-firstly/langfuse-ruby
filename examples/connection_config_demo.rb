@@ -10,6 +10,8 @@ puts "\n📋 默认配置信息:"
 puts "   默认主机: #{Langfuse.configuration.host}"
 puts "   默认超时: #{Langfuse.configuration.timeout}秒"
 puts "   默认重试: #{Langfuse.configuration.retries}次"
+puts "   默认刷新间隔: #{Langfuse.configuration.flush_interval}秒"
+puts "   默认自动刷新: #{Langfuse.configuration.auto_flush}"
 
 # 方法 1: 使用测试密钥创建客户端（仅用于演示）
 puts "\n📝 方法 1: 直接参数配置"
@@ -17,7 +19,9 @@ puts '代码示例：'
 puts 'client = Langfuse.new('
 puts "  public_key: 'pk-lf-your-public-key',"
 puts "  secret_key: 'sk-lf-your-secret-key',"
-puts "  host: 'https://us.cloud.langfuse.com'"
+puts "  host: 'https://us.cloud.langfuse.com',"
+puts '  flush_interval: 10,  # 每10秒刷新一次'
+puts '  auto_flush: true     # 启用自动刷新（默认）'
 puts ')'
 
 # 使用测试密钥创建客户端
@@ -31,6 +35,8 @@ puts '✅ 客户端配置成功'
 puts "   主机: #{test_client.host}"
 puts "   超时: #{test_client.timeout}秒"
 puts "   重试: #{test_client.retries}次"
+puts "   刷新间隔: #{test_client.flush_interval}秒"
+puts "   自动刷新: #{test_client.auto_flush}"
 
 # 方法 2: 全局配置
 puts "\n📝 方法 2: 全局配置"
@@ -40,6 +46,8 @@ puts "  config.public_key = 'pk-lf-your-public-key'"
 puts "  config.secret_key = 'sk-lf-your-secret-key'"
 puts "  config.host = 'https://us.cloud.langfuse.com'"
 puts '  config.debug = true'
+puts '  config.flush_interval = 10  # 每10秒刷新一次'
+puts '  config.auto_flush = true    # 启用自动刷新'
 puts 'end'
 
 Langfuse.configure do |config|
@@ -49,6 +57,8 @@ Langfuse.configure do |config|
   config.debug = true
   config.timeout = 60
   config.retries = 5
+  config.flush_interval = 10
+  config.auto_flush = true
 end
 
 global_client = Langfuse.new
@@ -57,6 +67,8 @@ puts "   主机: #{global_client.host}"
 puts "   调试模式: #{global_client.debug}"
 puts "   超时: #{global_client.timeout}秒"
 puts "   重试: #{global_client.retries}次"
+puts "   刷新间隔: #{global_client.flush_interval}秒"
+puts "   自动刷新: #{global_client.auto_flush}"
 
 # 方法 3: 环境变量配置
 puts "\n📝 方法 3: 环境变量配置"
@@ -64,6 +76,8 @@ puts '设置环境变量：'
 puts "export LANGFUSE_PUBLIC_KEY='pk-lf-your-public-key'"
 puts "export LANGFUSE_SECRET_KEY='sk-lf-your-secret-key'"
 puts "export LANGFUSE_HOST='https://us.cloud.langfuse.com'"
+puts 'export LANGFUSE_FLUSH_INTERVAL=10'
+puts 'export LANGFUSE_AUTO_FLUSH=true'
 puts ''
 puts '然后使用：'
 puts 'client = Langfuse.new'

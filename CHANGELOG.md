@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Added support for `event-create` event type in Langfuse ingestion API
+- New `Event` class for creating generic events within traces, spans, and generations
+- Added `event()` method to `Client`, `Trace`, `Span`, and `Generation` classes
+- Enhanced event validation to include all supported Langfuse event types
+- New example file `examples/event_usage.rb` demonstrating event functionality
+
+## [0.1.2] - 2025-01-13
+
+### Added
+- Enhanced event data validation and debugging capabilities
+- More detailed error messages for event structure validation failures
+
 ## [0.1.1] - 2025-01-12
 
 ### Fixed

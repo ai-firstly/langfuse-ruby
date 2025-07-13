@@ -6,22 +6,29 @@ require 'concurrent'
 
 module Langfuse
   class Client
-    attr_reader :public_key, :secret_key, :host, :debug, :timeout, :retries
+    attr_reader :public_key, :secret_key, :host, :debug, :timeout, :retries, :flush_interval, :auto_flush
 
-    def initialize(public_key: nil, secret_key: nil, host: nil, debug: false, timeout: 30, retries: 3)
+    def initialize(public_key: nil, secret_key: nil, host: nil, debug: false, timeout: 30, retries: 3,
+                   flush_interval: nil, auto_flush: nil)
       @public_key = public_key || ENV['LANGFUSE_PUBLIC_KEY'] || Langfuse.configuration.public_key
       @secret_key = secret_key || ENV['LANGFUSE_SECRET_KEY'] || Langfuse.configuration.secret_key
       @host = host || ENV['LANGFUSE_HOST'] || Langfuse.configuration.host
       @debug = debug || Langfuse.configuration.debug
       @timeout = timeout || Langfuse.configuration.timeout
       @retries = retries || Langfuse.configuration.retries
+      @flush_interval = flush_interval || ENV['LANGFUSE_FLUSH_INTERVAL']&.to_i || Langfuse.configuration.flush_interval
+      @auto_flush = if auto_flush.nil?
+                      ENV['LANGFUSE_AUTO_FLUSH'] == 'false' ? false : Langfuse.configuration.auto_flush
+                    else
+                      auto_flush
+                    end
 
       raise AuthenticationError, 'Public key is required' unless @public_key
       raise AuthenticationError, 'Secret key is required' unless @secret_key
 
       @connection = build_connection
       @event_queue = Concurrent::Array.new
-      @flush_thread = start_flush_thread
+      @flush_thread = start_flush_thread if @auto_flush
     end
 
     # Trace operations
@@ -82,6 +89,25 @@ module Langfuse
         input: input,
         output: output,
         usage: usage,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        **kwargs
+      )
+    end
+
+    # Event operations
+    def event(trace_id:, name:, start_time: nil, input: nil, output: nil, metadata: nil,
+              level: nil, status_message: nil, parent_observation_id: nil, version: nil, **kwargs)
+      Event.new(
+        client: self,
+        trace_id: trace_id,
+        name: name,
+        start_time: start_time,
+        input: input,
+        output: output,
         metadata: metadata,
         level: level,
         status_message: status_message,
@@ -158,29 +184,22 @@ module Langfuse
       enqueue_event('score-create', data)
     end
 
-    # HTTP methods
-    def get(path, params = {})
-      request(:get, path, params: params)
-    end
-
-    def post(path, data = {})
-      request(:post, path, json: data)
-    end
-
-    def put(path, data = {})
-      request(:put, path, json: data)
-    end
-
-    def delete(path, params = {})
-      request(:delete, path, params: params)
-    end
-
-    def patch(path, data = {})
-      request(:patch, path, json: data)
-    end
-
     # Event queue management
     def enqueue_event(type, body)
+      # 验证事件类型是否有效
+      valid_types = %w[
+        trace-create
+        generation-create generation-update
+        span-create span-update
+        event-create
+        score-create
+      ]
+
+      unless valid_types.include?(type)
+        puts "Warning: Invalid event type '#{type}'. Skipping event." if @debug
+        return
+      end
+
       event = {
         id: Utils.generate_id,
         type: type,
@@ -198,32 +217,99 @@ module Langfuse
       events = @event_queue.shift(@event_queue.length)
       return if events.empty?
 
-      batch_data = {
-        batch: events,
-        metadata: {
-          batch_size: events.length,
-          sdk_name: 'langfuse-ruby',
-          sdk_version: Langfuse::VERSION
-        }
-      }
-
-      begin
-        response = post('/api/public/ingestion', batch_data)
-        puts "Flushed #{events.length} events" if @debug
-      rescue StandardError => e
-        puts "Failed to flush events: #{e.message}" if @debug
-        # Re-queue events on failure
-        events.each { |event| @event_queue << event }
-        raise
-      end
+      send_batch(events)
     end
 
     def shutdown
-      @flush_thread&.kill
+      @flush_thread&.kill if @auto_flush
       flush unless @event_queue.empty?
     end
 
     private
+
+    def debug_event_data(events)
+      return unless @debug
+
+      puts "\n=== Event Data Debug Information ==="
+      events.each_with_index do |event, index|
+        puts "Event #{index + 1}:"
+        puts "  ID: #{event[:id]}"
+        puts "  Type: #{event[:type]}"
+        puts "  Timestamp: #{event[:timestamp]}"
+        puts "  Body keys: #{event[:body]&.keys || 'nil'}"
+
+        # 检查常见的问题
+        puts '  ⚠️  WARNING: Empty or nil type!' if event[:type].nil? || event[:type].to_s.empty?
+
+        puts '  ⚠️  WARNING: Empty body!' if event[:body].nil?
+
+        puts '  ---'
+      end
+      puts "=== End Debug Information ===\n"
+    end
+
+    def send_batch(events)
+      # 调试事件数据
+      debug_event_data(events)
+
+      # 验证事件数据
+      valid_events = events.select do |event|
+        if event[:type].nil? || event[:type].to_s.empty?
+          puts "Warning: Event with empty type detected, skipping: #{event[:id]}" if @debug
+          false
+        elsif event[:body].nil?
+          puts "Warning: Event with empty body detected, skipping: #{event[:id]}" if @debug
+          false
+        else
+          true
+        end
+      end
+
+      if valid_events.empty?
+        puts 'No valid events to send' if @debug
+        return
+      end
+
+      batch_data = build_batch_data(valid_events)
+      puts "Sending batch data: #{batch_data}" if @debug
+
+      begin
+        response = post('/api/public/ingestion', batch_data)
+        puts "Flushed #{valid_events.length} events" if @debug
+        response
+      rescue StandardError => e
+        puts "Failed to flush events: #{e.message}" if @debug
+        # Re-queue events on failure
+        valid_events.each { |event| @event_queue << event }
+        raise
+      end
+    end
+
+    def build_batch_data(events)
+      {
+        batch: events,
+        metadata: Utils.deep_camelize_keys({
+                                             batch_size: events.length,
+                                             sdk_name: 'langfuse-ruby',
+                                             sdk_version: Langfuse::VERSION
+                                           })
+      }
+    end
+
+    def start_flush_thread
+      return unless @auto_flush
+
+      Thread.new do
+        loop do
+          sleep(@flush_interval) # Configurable flush interval
+          begin
+            flush unless @event_queue.empty?
+          rescue StandardError => e
+            puts "Error in flush thread: #{e.message}" if @debug
+          end
+        end
+      end
+    end
 
     def build_connection
       Faraday.new(url: @host) do |conn|
@@ -246,6 +332,27 @@ module Langfuse
         # 使用默认适配器
         conn.adapter Faraday.default_adapter
       end
+    end
+
+    # HTTP methods
+    def get(path, params = {})
+      request(:get, path, params: params)
+    end
+
+    def post(path, data = {})
+      request(:post, path, json: data)
+    end
+
+    def put(path, data = {})
+      request(:put, path, json: data)
+    end
+
+    def delete(path, params = {})
+      request(:delete, path, params: params)
+    end
+
+    def patch(path, data = {})
+      request(:patch, path, json: data)
     end
 
     def request(method, path, params: {}, json: nil)
@@ -293,24 +400,26 @@ module Langfuse
       when 429
         raise RateLimitError, "Rate limit exceeded: #{response.body}"
       when 400..499
-        raise ValidationError, "Client error (#{response.status}): #{response.body}"
+        # 为 400 错误提供更详细的错误信息
+        error_details = ''
+        if response.body.is_a?(Hash) && response.body['error']
+          error_details = "\nError details: #{response.body['error']}"
+        elsif response.body.is_a?(String)
+          error_details = "\nError details: #{response.body}"
+        end
+
+        # 特别处理类型验证错误
+        unless response.body.to_s.include?('invalid_union') || response.body.to_s.include?('discriminator')
+          raise ValidationError, "Client error (#{response.status}): #{response.body}#{error_details}"
+        end
+
+        raise ValidationError,
+              "Event type validation failed (#{response.status}): The event type or structure is invalid. Please check the event format.#{error_details}"
+
       when 500..599
         raise APIError, "Server error (#{response.status}): #{response.body}"
       else
         raise APIError, "Unexpected response (#{response.status}): #{response.body}"
-      end
-    end
-
-    def start_flush_thread
-      Thread.new do
-        loop do
-          sleep(5) # Flush every 5 seconds
-          begin
-            flush unless @event_queue.empty?
-          rescue StandardError => e
-            puts "Error in flush thread: #{e.message}" if @debug
-          end
-        end
       end
     end
   end

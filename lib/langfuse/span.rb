@@ -91,6 +91,23 @@ module Langfuse
       )
     end
 
+    def event(name:, start_time: nil, input: nil, output: nil, metadata: nil,
+              level: nil, status_message: nil, version: nil, **kwargs)
+      @client.event(
+        trace_id: @trace_id,
+        name: name,
+        start_time: start_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: @id,
+        version: version,
+        **kwargs
+      )
+    end
+
     def score(name:, value:, data_type: nil, comment: nil, **kwargs)
       @client.score(
         observation_id: @id,

@@ -47,11 +47,6 @@ generation = trace.generation(
 
 puts "Created generation: #{generation.id}"
 
-# Update trace with final output
-trace.update(
-  output: { response: "I'm doing well, thank you! How can I help you today?" }
-)
-
 puts "Trace URL: #{trace.get_url}"
 
 # Example 2: Nested spans for complex workflow
@@ -125,13 +120,6 @@ answer_gen = answer_span.generation(
 )
 
 answer_span.end(
-  output: {
-    answer: 'Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. ML algorithms identify patterns in data and use these patterns to make predictions or decisions.'
-  }
-)
-
-# Update workflow trace
-workflow_trace.update(
   output: {
     answer: 'Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. ML algorithms identify patterns in data and use these patterns to make predictions or decisions.'
   }
