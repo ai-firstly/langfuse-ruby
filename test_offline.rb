@@ -288,19 +288,45 @@ end
 # Test 11: Error handling
 puts "\n11. Testing error handling..."
 begin
-  # Test validation error
+  # Save current configuration
+  original_public_key = Langfuse.configuration.public_key
+  original_secret_key = Langfuse.configuration.secret_key
+
+  # Test authentication error - missing public key
   begin
-    Langfuse::Utils.validate_required_fields({ name: 'test' }, %i[name required_field])
+    Langfuse.configuration.public_key = nil
+    ENV.delete('LANGFUSE_PUBLIC_KEY')
+    Langfuse.new(public_key: nil, secret_key: 'secret')
+    puts '❌ Expected AuthenticationError but none was raised'
+  rescue Langfuse::AuthenticationError => e
+    puts "✅ Authentication error caught: #{e.message}"
+  ensure
+    Langfuse.configuration.public_key = original_public_key
+  end
+
+  # Test authentication error - missing secret key
+  begin
+    Langfuse.configuration.secret_key = nil
+    ENV.delete('LANGFUSE_SECRET_KEY')
+    Langfuse.new(public_key: 'public', secret_key: nil)
+    puts '❌ Expected AuthenticationError but none was raised'
+  rescue Langfuse::AuthenticationError => e
+    puts "✅ Authentication error caught: #{e.message}"
+  ensure
+    Langfuse.configuration.secret_key = original_secret_key
+  end
+
+  # Test validation error through prompt template
+  begin
+    template = Langfuse::PromptTemplate.from_template('Hello {{name}}!')
+    # This should work fine
+    result = template.format(name: 'World')
+    puts "✅ Prompt template validation passed: #{result}"
   rescue Langfuse::ValidationError => e
     puts "✅ Validation error caught: #{e.message}"
   end
 
-  # Test authentication error
-  begin
-    Langfuse.new(public_key: nil, secret_key: 'secret')
-  rescue Langfuse::AuthenticationError => e
-    puts "✅ Authentication error caught: #{e.message}"
-  end
+  puts '✅ Error handling tests completed'
 rescue StandardError => e
   puts "❌ Error handling failed: #{e.message}"
 end

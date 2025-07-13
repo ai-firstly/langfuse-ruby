@@ -95,6 +95,23 @@ module Langfuse
       )
     end
 
+    def update(name: nil, user_id: nil, session_id: nil, version: nil,
+               release: nil, input: nil, output: nil, metadata: nil, tags: nil, **kwargs)
+      # 更新实例变量
+      @name = name if name
+      @user_id = user_id if user_id
+      @session_id = session_id if session_id
+      @version = version if version
+      @release = release if release
+      @input = input if input
+      @output = output if output
+      @metadata = metadata if metadata
+      @tags = tags if tags
+      @kwargs.merge!(kwargs) if kwargs.any?
+      # 触发 trace-update 事件
+      update_trace
+    end
+
     def get_url
       "#{@client.host}/trace/#{@id}"
     end
@@ -133,6 +150,24 @@ module Langfuse
       }.merge(@kwargs).compact
 
       @client.enqueue_event('trace-create', data)
+    end
+
+    def update_trace
+      data = {
+        id: @id,
+        name: @name,
+        user_id: @user_id,
+        session_id: @session_id,
+        version: @version,
+        release: @release,
+        input: @input,
+        output: @output,
+        metadata: @metadata,
+        tags: @tags,
+        timestamp: @timestamp
+      }.merge(@kwargs).compact
+
+      @client.enqueue_event('trace-update', data)
     end
   end
 end

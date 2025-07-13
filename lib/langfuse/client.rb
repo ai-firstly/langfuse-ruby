@@ -188,7 +188,7 @@ module Langfuse
     def enqueue_event(type, body)
       # 验证事件类型是否有效
       valid_types = %w[
-        trace-create
+        trace-create trace-update
         generation-create generation-update
         span-create span-update
         event-create
@@ -207,7 +207,32 @@ module Langfuse
         body: Utils.deep_stringify_keys(body)
       }
 
-      @event_queue << event
+      if type == 'trace-update'
+        # 查找对应的 trace-create 事件并更新
+        trace_id = body['id'] || body[:id]
+        if trace_id
+          existing_event_index = @event_queue.find_index do |existing_event|
+            existing_event[:type] == 'trace-create' &&
+              (existing_event[:body]['id'] == trace_id || existing_event[:body][:id] == trace_id)
+          end
+
+          if existing_event_index
+            # 更新现有的 trace-create 事件
+            @event_queue[existing_event_index][:body].merge!(event[:body])
+            @event_queue[existing_event_index][:timestamp] = event[:timestamp]
+            puts "Updated existing trace-create event for trace_id: #{trace_id}" if @debug
+          else
+            # 如果没找到对应的 trace-create 事件，将 trace-update 转换为 trace-create
+            event[:type] = 'trace-create'
+            @event_queue << event
+            puts "Converted trace-update to trace-create for trace_id: #{trace_id}" if @debug
+          end
+        elsif @debug
+          puts 'Warning: trace-update event missing trace_id, skipping'
+        end
+      else
+        @event_queue << event
+      end
       puts "Enqueued event: #{type}" if @debug
     end
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2025-01-13
+
 ### Added
 - Added support for `event-create` event type in Langfuse ingestion API
 - New `Event` class for creating generic events within traces, spans, and generations
@@ -14,9 +16,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced event validation to include all supported Langfuse event types
 - New example file `examples/event_usage.rb` demonstrating event functionality
 
-## [0.1.2] - 2025-01-13
+### Fixed
+- Improved offline test error handling and authentication validation
+- Enhanced error handling tests with proper configuration management
+- Fixed prompt template validation tests in offline mode
+- Better error message handling for authentication failures
 
-### Added
+### Improved
+- More comprehensive error handling test coverage
+- Better test isolation and cleanup procedures
+- Enhanced debugging capabilities for offline testing
+
+## [0.1.3] - 2025-01-13
+
+### Fixed
+- Enhanced event data validation and debugging capabilities
+- More detailed error messages for event structure validation failures
+
+## [0.1.2] - 2025-01-12
+
+### Fixed
 - Enhanced event data validation and debugging capabilities
 - More detailed error messages for event structure validation failures
 
