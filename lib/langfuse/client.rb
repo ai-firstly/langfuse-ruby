@@ -1,5 +1,6 @@
 require 'faraday'
 require 'faraday/net_http'
+require 'faraday/multipart'
 require 'json'
 require 'base64'
 require 'concurrent'
