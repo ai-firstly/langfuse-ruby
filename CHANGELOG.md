@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.4] - 2025-01-13
+## [0.1.4] - 2025-07-29
 
 ### Added
+- Added support for `trace-update` event type in Langfuse ingestion API
 - Added support for `event-create` event type in Langfuse ingestion API
 - New `Event` class for creating generic events within traces, spans, and generations
 - Added `event()` method to `Client`, `Trace`, `Span`, and `Generation` classes
@@ -27,19 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Better test isolation and cleanup procedures
 - Enhanced debugging capabilities for offline testing
 
-## [0.1.3] - 2025-01-13
+## [0.1.3] - 2025-07-13
 
 ### Fixed
 - Enhanced event data validation and debugging capabilities
 - More detailed error messages for event structure validation failures
 
-## [0.1.2] - 2025-01-12
+## [0.1.2] - 2025-07-12
 
 ### Fixed
 - Enhanced event data validation and debugging capabilities
 - More detailed error messages for event structure validation failures
 
-## [0.1.1] - 2025-01-12
+## [0.1.1] - 2025-07-12
 
 ### Fixed
 - Improved error handling for `get_prompt` method when prompt doesn't exist
@@ -55,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated gemspec metadata to avoid RubyGems warnings
 - Improved documentation with clearer error handling examples
 
-## [0.1.0] - 2025-01-12
+## [0.1.0] - 2025-07-12
 
 ### Added
 - Initial release of Langfuse Ruby SDK

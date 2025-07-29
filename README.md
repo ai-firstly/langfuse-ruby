@@ -82,6 +82,8 @@ generation = trace.generation(
 
 generation.end(output: 'Hello! How can I help you today?', usage: { prompt_tokens: 10, completion_tokens: 15, total_tokens: 25 })
 
+trace.update(output: 'Hello! How can I help you today?')
+
 # Flush events (optional - happens automatically)
 client.flush
 ```
