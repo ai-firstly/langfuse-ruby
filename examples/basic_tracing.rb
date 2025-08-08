@@ -19,8 +19,8 @@ trace = client.trace(
   user_id: 'user-123',
   session_id: 'session-456',
   input: { message: 'Hello, how are you?' },
+  environment: 'development',
   metadata: {
-    environment: 'development',
     version: '1.0.0'
   }
 )

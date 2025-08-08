@@ -209,8 +209,8 @@ begin
     user_id: 'user-456',
     session_id: 'session-789',
     input: { query: 'Explain quantum computing' },
+    environment: 'test',
     metadata: {
-      environment: 'test',
       version: '1.0.0',
       tags: %w[physics computing]
     }

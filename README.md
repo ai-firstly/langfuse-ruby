@@ -69,7 +69,7 @@ trace = client.trace(
   name: "chat-completion",
   user_id: "user123",
   session_id: "session456",
-  metadata: { environment: "production" }
+  environment: "production"
 )
 
 # Add a generation (LLM call)
