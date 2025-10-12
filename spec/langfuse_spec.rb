@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 RSpec.describe Langfuse do
   it 'has a version number' do
     expect(Langfuse::VERSION).not_to be nil

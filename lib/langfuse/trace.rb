@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Langfuse
   class Trace
     attr_reader :id, :name, :user_id, :session_id, :version, :release, :input, :output,

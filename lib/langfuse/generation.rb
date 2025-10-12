@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Langfuse
   class Generation
     attr_reader :id, :trace_id, :name, :start_time, :end_time, :completion_start_time,

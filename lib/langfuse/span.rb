@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Langfuse
   class Span
     attr_reader :id, :trace_id, :name, :start_time, :end_time, :input, :output,

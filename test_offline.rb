@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require_relative 'lib/langfuse'
 
@@ -223,7 +224,7 @@ begin
   )
 
   # Embedding generation
-  embedding_gen = retrieval_span.generation(
+  retrieval_span.generation(
     name: 'embedding-generation',
     model: 'text-embedding-ada-002',
     input: 'quantum computing basics',
@@ -250,7 +251,7 @@ begin
   )
 
   # LLM generation
-  llm_gen = answer_span.generation(
+  answer_span.generation(
     name: 'openai-completion',
     model: 'gpt-4',
     input: [
@@ -258,7 +259,10 @@ begin
       { role: 'user', content: 'Explain quantum computing based on the context.' }
     ],
     output: {
-      content: 'Quantum computing is a revolutionary approach to computation that leverages quantum mechanical phenomena like superposition and entanglement to process information in fundamentally different ways than classical computers.'
+      content: 'Quantum computing is a revolutionary approach to computation that ' \
+               'leverages quantum mechanical phenomena like superposition and ' \
+               'entanglement to process information in fundamentally different ' \
+               'ways than classical computers.'
     },
     usage: {
       prompt_tokens: 120,
@@ -273,7 +277,10 @@ begin
 
   answer_span.end(
     output: {
-      answer: 'Quantum computing is a revolutionary approach to computation that leverages quantum mechanical phenomena like superposition and entanglement to process information in fundamentally different ways than classical computers.'
+      answer: 'Quantum computing is a revolutionary approach to computation that ' \
+              'leverages quantum mechanical phenomena like superposition and ' \
+              'entanglement to process information in fundamentally different ' \
+              'ways than classical computers.'
     }
   )
 

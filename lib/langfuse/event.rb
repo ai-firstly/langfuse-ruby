@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Langfuse
   class Event
     attr_reader :id, :trace_id, :name, :start_time, :input, :output, :metadata,
