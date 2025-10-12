@@ -86,10 +86,10 @@ module Langfuse
 
     class ExactMatchEvaluator < BaseEvaluator
       def initialize(name: 'exact_match', description: 'Exact match evaluator')
-        super(name: name, description: description)
+        super
       end
 
-      def evaluate(_input, output, expected: nil, context: nil)
+      def evaluate(_input, output, expected: nil, _context: nil)
         return create_score(value: 0, comment: 'No expected value provided') unless expected
 
         score = output.to_s.strip == expected.to_s.strip ? 1 : 0
@@ -106,7 +106,7 @@ module Langfuse
         @case_sensitive = case_sensitive
       end
 
-      def evaluate(_input, output, expected: nil, context: nil)
+      def evaluate(_input, output, expected: nil, _context: nil)
         return create_score(value: 0, comment: 'No expected value provided') unless expected
 
         output_str = @case_sensitive ? output.to_s : output.to_s.downcase
@@ -127,12 +127,16 @@ module Langfuse
         @max_length = max_length
       end
 
-      def evaluate(_input, output, expected: nil, context: nil)
+      def evaluate(_input, output, expected: nil, _context: nil)
         length = output.to_s.length
 
         if @min_length && @max_length
-          score = length >= @min_length && length <= @max_length ? 1 : 0
-          comment = score == 1 ? "Length #{length} within range" : "Length #{length} outside range #{@min_length}-#{@max_length}"
+          score = length.between?(@min_length, @max_length) ? 1 : 0
+          comment = if score == 1
+                      "Length #{length} within range"
+                    else
+                      "Length #{length} outside range #{@min_length}-#{@max_length}"
+                    end
         elsif @min_length
           score = length >= @min_length ? 1 : 0
           comment = score == 1 ? "Length #{length} meets minimum" : "Length #{length} below minimum #{@min_length}"
@@ -158,7 +162,7 @@ module Langfuse
         @pattern = pattern.is_a?(Regexp) ? pattern : Regexp.new(pattern)
       end
 
-      def evaluate(_input, output, expected: nil, context: nil)
+      def evaluate(_input, output, expected: nil, _context: nil)
         match = @pattern.match(output.to_s)
         score = match ? 1 : 0
 
@@ -171,10 +175,10 @@ module Langfuse
 
     class SimilarityEvaluator < BaseEvaluator
       def initialize(name: 'similarity', description: 'Similarity evaluator')
-        super(name: name, description: description)
+        super
       end
 
-      def evaluate(_input, output, expected: nil, context: nil)
+      def evaluate(_input, output, expected: nil, _context: nil)
         return create_score(value: 0, comment: 'No expected value provided') unless expected
 
         # Simple character-based similarity (Levenshtein distance)

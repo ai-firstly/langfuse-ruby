@@ -5,8 +5,8 @@ require 'langfuse'
 
 # Initialize the Langfuse client
 client = Langfuse.new(
-  public_key: ENV['LANGFUSE_PUBLIC_KEY'],
-  secret_key: ENV['LANGFUSE_SECRET_KEY'],
+  public_key: ENV.fetch('LANGFUSE_PUBLIC_KEY', nil),
+  secret_key: ENV.fetch('LANGFUSE_SECRET_KEY', nil),
   host: ENV['LANGFUSE_HOST'] || 'https://cloud.langfuse.com'
 )
 
@@ -107,11 +107,14 @@ answer_gen = answer_span.generation(
     },
     {
       role: 'user',
-      content: 'What is machine learning? Context: Machine learning is a subset of artificial intelligence... ML algorithms learn patterns from data...'
+      content: 'What is machine learning? Context: Machine learning is a subset of artificial ' \
+               'intelligence... ML algorithms learn patterns from data...'
     }
   ],
   output: {
-    content: 'Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. ML algorithms identify patterns in data and use these patterns to make predictions or decisions.'
+    content: 'Machine learning is a subset of artificial intelligence that enables computers to learn ' \
+             'and improve from experience without being explicitly programmed. ML algorithms identify ' \
+             'patterns in data and use these patterns to make predictions or decisions.'
   },
   usage: {
     prompt_tokens: 85,
@@ -122,7 +125,9 @@ answer_gen = answer_span.generation(
 
 answer_span.end(
   output: {
-    answer: 'Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. ML algorithms identify patterns in data and use these patterns to make predictions or decisions.'
+    answer: 'Machine learning is a subset of artificial intelligence that enables computers to learn ' \
+            'and improve from experience without being explicitly programmed. ML algorithms identify ' \
+            'patterns in data and use these patterns to make predictions or decisions.'
   }
 )
 

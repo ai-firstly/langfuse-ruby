@@ -419,11 +419,12 @@ module Langfuse
       when 404
         # 404 错误通常返回 HTML 页面
         error_message = 'Resource not found (404)'
-        if response.body.is_a?(String) && response.body.include?('<!DOCTYPE html>')
-          error_message += '. Server returned HTML page instead of JSON API response. This usually means the requested resource does not exist.'
-        else
-          error_message += ": #{response.body}"
-        end
+        error_message += if response.body.is_a?(String) && response.body.include?('<!DOCTYPE html>')
+                           '. Server returned HTML page instead of JSON API response. ' \
+                             'This usually means the requested resource does not exist.'
+                         else
+                           ": #{response.body}"
+                         end
         raise ValidationError, error_message
       when 429
         raise RateLimitError, "Rate limit exceeded: #{response.body}"
@@ -442,7 +443,8 @@ module Langfuse
         end
 
         raise ValidationError,
-              "Event type validation failed (#{response.status}): The event type or structure is invalid. Please check the event format.#{error_details}"
+              "Event type validation failed (#{response.status}): The event type or structure is " \
+              "invalid. Please check the event format.#{error_details}"
 
       when 500..599
         raise APIError, "Server error (#{response.status}): #{response.body}"
