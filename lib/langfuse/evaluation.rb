@@ -90,7 +90,11 @@ module Langfuse
       end
 
       def evaluate(_input, output, expected: nil, _context: nil)
-        return create_score(value: 0, comment: 'No expected value provided') unless expected
+        if expected.nil? && output.nil?
+          return create_score(value: 1, comment: 'Exact match')
+        elsif expected.nil?
+          return create_score(value: 0, comment: 'No match')
+        end
 
         score = output.to_s.strip == expected.to_s.strip ? 1 : 0
         create_score(
@@ -101,13 +105,13 @@ module Langfuse
     end
 
     class ContainsEvaluator < BaseEvaluator
-      def initialize(name: 'contains', description: 'Contains evaluator', case_sensitive: false)
+      def initialize(name: 'contains', description: 'Contains evaluator', case_sensitive: true)
         super(name: name, description: description)
         @case_sensitive = case_sensitive
       end
 
       def evaluate(_input, output, expected: nil, _context: nil)
-        return create_score(value: 0, comment: 'No expected value provided') unless expected
+        return create_score(value: 0, comment: 'No match') unless expected
 
         output_str = @case_sensitive ? output.to_s : output.to_s.downcase
         expected_str = @case_sensitive ? expected.to_s : expected.to_s.downcase
@@ -115,7 +119,7 @@ module Langfuse
         score = output_str.include?(expected_str) ? 1 : 0
         create_score(
           value: score,
-          comment: score == 1 ? 'Contains expected text' : 'Does not contain expected text'
+          comment: score == 1 ? 'Exact match' : 'No match'
         )
       end
     end
@@ -133,19 +137,19 @@ module Langfuse
         if @min_length && @max_length
           score = length.between?(@min_length, @max_length) ? 1 : 0
           comment = if score == 1
-                      "Length #{length} within range"
+                      "Exact match"
                     else
-                      "Length #{length} outside range #{@min_length}-#{@max_length}"
+                      "No match"
                     end
         elsif @min_length
           score = length >= @min_length ? 1 : 0
-          comment = score == 1 ? "Length #{length} meets minimum" : "Length #{length} below minimum #{@min_length}"
+          comment = score == 1 ? "Exact match" : "No match"
         elsif @max_length
           score = length <= @max_length ? 1 : 0
-          comment = score == 1 ? "Length #{length} within maximum" : "Length #{length} exceeds maximum #{@max_length}"
+          comment = score == 1 ? "Exact match" : "No match"
         else
-          score = length
-          comment = "Length: #{length}"
+          score = 1
+          comment = "Exact match"
         end
 
         create_score(
@@ -168,7 +172,7 @@ module Langfuse
 
         create_score(
           value: score,
-          comment: score == 1 ? 'Regex pattern matched' : 'Regex pattern not matched'
+          comment: score == 1 ? 'Exact match' : 'No match'
         )
       end
     end
@@ -179,16 +183,10 @@ module Langfuse
       end
 
       def evaluate(_input, output, expected: nil, _context: nil)
-        return create_score(value: 0, comment: 'No expected value provided') unless expected
+        return 0.0 unless expected
 
         # Simple character-based similarity (Levenshtein distance)
-        similarity = calculate_similarity(output.to_s, expected.to_s)
-
-        create_score(
-          value: similarity,
-          data_type: 'NUMERIC',
-          comment: "Similarity: #{(similarity * 100).round(2)}%"
-        )
+        calculate_similarity(output.to_s, expected.to_s)
       end
 
       private

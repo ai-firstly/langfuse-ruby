@@ -19,7 +19,14 @@ module Langfuse
 
         hash.each_with_object({}) do |(key, value), result|
           new_key = key.is_a?(String) ? key.to_sym : key
-          new_value = value.is_a?(Hash) ? deep_symbolize_keys(value) : value
+          new_value = case value
+                     when Hash
+                       deep_symbolize_keys(value)
+                     when Array
+                       value.map { |v| v.is_a?(Hash) ? deep_symbolize_keys(v) : v }
+                     else
+                       value
+                     end
           result[new_key] = new_value
         end
       end
@@ -28,8 +35,15 @@ module Langfuse
         return hash unless hash.is_a?(Hash)
 
         hash.each_with_object({}) do |(key, value), result|
-          new_key = camelize_key(key.to_s)
-          new_value = value.is_a?(Hash) ? deep_stringify_keys(value) : value
+          new_key = key.to_s
+          new_value = case value
+                     when Hash
+                       deep_stringify_keys(value)
+                     when Array
+                       value.map { |v| v.is_a?(Hash) ? deep_stringify_keys(v) : v }
+                     else
+                       value
+                     end
           result[new_key] = new_value
         end
       end
@@ -40,7 +54,14 @@ module Langfuse
 
         hash.each_with_object({}) do |(key, value), result|
           new_key = camelize_key(key.to_s)
-          new_value = value.is_a?(Hash) ? deep_camelize_keys(value) : value
+          new_value = case value
+                     when Hash
+                       deep_camelize_keys(value)
+                     when Array
+                       value.map { |v| v.is_a?(Hash) ? deep_camelize_keys(v) : v }
+                     else
+                       value
+                     end
           result[new_key] = new_value
         end
       end

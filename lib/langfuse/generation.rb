@@ -9,7 +9,7 @@ module Langfuse
     def initialize(client:, trace_id:, id: nil, name: nil, start_time: nil, end_time: nil,
                    completion_start_time: nil, model: nil, model_parameters: nil, input: nil,
                    output: nil, usage: nil, metadata: nil, level: nil, status_message: nil,
-                   parent_observation_id: nil, version: nil, **kwargs)
+                   parent_observation_id: nil, version: nil, status: nil, **kwargs)
       @client = client
       @id = id || Utils.generate_id
       @trace_id = trace_id
@@ -24,7 +24,7 @@ module Langfuse
       @usage = usage || {}
       @metadata = metadata || {}
       @level = level
-      @status_message = status_message
+      @status_message = status_message || status  # Support both status and status_message
       @parent_observation_id = parent_observation_id
       @version = version
       @kwargs = kwargs
@@ -62,6 +62,10 @@ module Langfuse
 
       update_generation
       self
+    end
+
+    def status
+      @status_message
     end
 
     def span(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
@@ -124,11 +128,12 @@ module Langfuse
 
     def score(name:, value:, data_type: nil, comment: nil, **kwargs)
       @client.score(
-        observation_id: @id,
         name: name,
         value: value,
         data_type: data_type,
         comment: comment,
+        trace_id: @trace_id,
+        generation_id: @id,
         **kwargs
       )
     end

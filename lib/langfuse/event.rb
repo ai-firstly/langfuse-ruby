@@ -42,6 +42,17 @@ module Langfuse
       }.merge(@kwargs).compact
     end
 
+    def update(output: nil, metadata: nil, level: nil, status_message: nil, **kwargs)
+      @output = output if output
+      @metadata = metadata if metadata
+      @level = level if level
+      @status_message = status_message if status_message
+      @kwargs.merge!(kwargs)
+
+      # Update the event
+      update_event
+    end
+
     private
 
     def create_event
@@ -60,6 +71,18 @@ module Langfuse
       }.merge(@kwargs).compact
 
       @client.enqueue_event('event-create', data)
+    end
+
+    def update_event
+      data = {
+        id: @id,
+        output: @output,
+        metadata: @metadata,
+        level: @level,
+        status_message: @status_message
+      }.merge(@kwargs).compact
+
+      @client.enqueue_event('event-update', data)
     end
   end
 end
