@@ -66,6 +66,10 @@ module Langfuse
     end
 
     # Create a child span
+    def status
+      @status_message
+    end
+
     def span(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
              metadata: nil, level: nil, status_message: nil, version: nil, as_type: nil, **kwargs)
       @client.span(
@@ -261,11 +265,12 @@ module Langfuse
 
     def score(name:, value:, data_type: nil, comment: nil, **kwargs)
       @client.score(
-        observation_id: @id,
         name: name,
         value: value,
         data_type: data_type,
         comment: comment,
+        trace_id: @trace_id,
+        generation_id: @id,
         **kwargs
       )
     end

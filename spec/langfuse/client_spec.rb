@@ -41,6 +41,47 @@ RSpec.describe Langfuse::Client do
       expect(trace.name).to eq('test_trace')
       expect(trace.id).not_to be_nil
     end
+
+    it 'creates a trace with detailed attributes' do
+      trace = client.trace(
+        name: 'detailed-trace',
+        user_id: 'user-123',
+        session_id: 'session-456',
+        input: { query: 'test query' },
+        output: { result: 'test result' },
+        environment: 'test',
+        metadata: { version: '1.0', tags: %w[test demo] }
+      )
+
+      expect(trace.name).to eq('detailed-trace')
+      expect(trace.user_id).to eq('user-123')
+      expect(trace.session_id).to eq('session-456')
+      expect(trace.input).to eq({ query: 'test query' })
+      expect(trace.output).to eq({ result: 'test result' })
+      expect(trace.metadata[:version]).to eq('1.0')
+      expect(trace.metadata[:tags]).to eq(%w[test demo])
+      expect(trace.metadata[:environment]).to eq('test')
+    end
+
+    it 'creates a trace with complex nested data' do
+      complex_input = {
+        user_query: 'Explain quantum computing',
+        context: {
+          user_level: 'beginner',
+          preferred_language: 'English',
+          time_constraint: '5 minutes'
+        },
+        constraints: {
+          max_complexity: 'medium',
+          avoid_mathematics: true
+        }
+      }
+
+      trace = client.trace(name: 'complex-trace', input: complex_input)
+
+      expect(trace.input).to eq(complex_input)
+      expect(trace.input[:context][:user_level]).to eq('beginner')
+    end
   end
 
   describe 'span operations' do
@@ -79,6 +120,26 @@ RSpec.describe Langfuse::Client do
         trace_id: 'test_trace_id',
         name: 'test_score',
         value: 0.8
+      )
+    end
+
+    it 'creates a score with optional parameters' do
+      expect(client).to receive(:enqueue_event).with('score-create', hash_including(
+                                                                       name: 'detailed-score',
+                                                                       value: 'excellent',
+                                                                       data_type: 'CATEGORICAL',
+                                                                       config_id: 'quality-v1',
+                                                                       trace_id: 'test-trace',
+                                                                       observation_id: 'obs-123'
+                                                                     ))
+
+      client.score(
+        trace_id: 'test-trace',
+        name: 'detailed-score',
+        value: 'excellent',
+        data_type: 'CATEGORICAL',
+        config_id: 'quality-v1',
+        observation_id: 'obs-123'
       )
     end
   end

@@ -3,11 +3,11 @@
 module Langfuse
   class Trace
     attr_reader :id, :name, :user_id, :session_id, :version, :release, :input, :output,
-                :metadata, :tags, :timestamp, :client
+                :metadata, :tags, :timestamp, :end_time, :status, :client
 
     def initialize(client:, id:, name: nil, user_id: nil, session_id: nil, version: nil,
                    release: nil, input: nil, output: nil, metadata: nil, tags: nil,
-                   timestamp: nil, **kwargs)
+                   timestamp: nil, end_time: nil, status: nil, **kwargs)
       @client = client
       @id = id
       @name = name
@@ -17,10 +17,12 @@ module Langfuse
       @release = release
       @input = input
       @output = output
-      @metadata = metadata || {}
+      @metadata = (metadata || {}).merge(kwargs)
       @tags = tags || []
       @timestamp = timestamp
-      @kwargs = kwargs
+      @end_time = end_time
+      @status = status
+      @kwargs = {}
 
       # Create the trace
       create_trace
@@ -247,7 +249,7 @@ module Langfuse
     end
 
     def update(name: nil, user_id: nil, session_id: nil, version: nil,
-               release: nil, input: nil, output: nil, metadata: nil, tags: nil, **kwargs)
+               release: nil, input: nil, output: nil, metadata: nil, tags: nil, status: nil, **kwargs)
       # 更新实例变量
       @name = name if name
       @user_id = user_id if user_id
@@ -258,8 +260,16 @@ module Langfuse
       @output = output if output
       @metadata = metadata if metadata
       @tags = tags if tags
+      @status = status if status
       @kwargs.merge!(kwargs) if kwargs.any?
       # 触发 trace-update 事件
+      update_trace
+    end
+
+    def end(output: nil, status: nil)
+      @output = output if output
+      @status = status if status
+      @end_time = Time.now.utc.iso8601(3)
       update_trace
     end
 
@@ -279,7 +289,9 @@ module Langfuse
         output: @output,
         metadata: @metadata,
         tags: @tags,
-        timestamp: @timestamp
+        timestamp: @timestamp,
+        end_time: @end_time,
+        status: @status
       }.merge(@kwargs).compact
     end
 
@@ -306,17 +318,9 @@ module Langfuse
     def update_trace
       data = {
         id: @id,
-        name: @name,
-        user_id: @user_id,
-        session_id: @session_id,
-        version: @version,
-        release: @release,
-        input: @input,
         output: @output,
-        metadata: @metadata,
-        tags: @tags,
-        timestamp: @timestamp
-      }.merge(@kwargs).compact
+        status: @status
+      }.compact
 
       @client.enqueue_event('trace-update', data)
     end
