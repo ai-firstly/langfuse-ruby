@@ -259,10 +259,9 @@ begin
       { role: 'user', content: 'Explain quantum computing based on the context.' }
     ],
     output: {
-      content: 'Quantum computing is a revolutionary approach to computation that ' \
-               'leverages quantum mechanical phenomena like superposition and ' \
-               'entanglement to process information in fundamentally different ' \
-               'ways than classical computers.'
+      content: 'Quantum computing is a revolutionary approach to computation that leverages ' \
+               'quantum mechanical phenomena like superposition and entanglement to process ' \
+               'information in fundamentally different ways than classical computers.'
     },
     usage: {
       prompt_tokens: 120,
@@ -277,10 +276,9 @@ begin
 
   answer_span.end(
     output: {
-      answer: 'Quantum computing is a revolutionary approach to computation that ' \
-              'leverages quantum mechanical phenomena like superposition and ' \
-              'entanglement to process information in fundamentally different ' \
-              'ways than classical computers.'
+      answer: 'Quantum computing is a revolutionary approach to computation that leverages ' \
+              'quantum mechanical phenomena like superposition and entanglement to process ' \
+              'information in fundamentally different ways than classical computers.'
     }
   )
 
