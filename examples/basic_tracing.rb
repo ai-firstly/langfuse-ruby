@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require 'langfuse'
 
@@ -65,7 +66,7 @@ retrieval_span = workflow_trace.span(
 )
 
 # Embedding generation within retrieval
-embedding_gen = retrieval_span.generation(
+retrieval_span.generation(
   name: 'embedding-generation',
   model: 'text-embedding-ada-002',
   input: 'What is machine learning?',
@@ -158,7 +159,7 @@ puts "\n🚨 Example 4: Error handling"
 begin
   error_trace = client.trace(name: 'error-example')
 
-  error_gen = error_trace.generation(
+  error_trace.generation(
     name: 'failed-generation',
     model: 'gpt-3.5-turbo',
     input: [{ role: 'user', content: 'This will fail' }],

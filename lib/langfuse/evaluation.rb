@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Langfuse
   class Evaluation
     attr_reader :id, :name, :value, :data_type, :comment, :trace_id, :observation_id, :created_at
@@ -87,7 +89,7 @@ module Langfuse
         super(name: name, description: description)
       end
 
-      def evaluate(input, output, expected: nil, context: nil)
+      def evaluate(_input, output, expected: nil, context: nil)
         return create_score(value: 0, comment: 'No expected value provided') unless expected
 
         score = output.to_s.strip == expected.to_s.strip ? 1 : 0
@@ -104,7 +106,7 @@ module Langfuse
         @case_sensitive = case_sensitive
       end
 
-      def evaluate(input, output, expected: nil, context: nil)
+      def evaluate(_input, output, expected: nil, context: nil)
         return create_score(value: 0, comment: 'No expected value provided') unless expected
 
         output_str = @case_sensitive ? output.to_s : output.to_s.downcase
@@ -125,7 +127,7 @@ module Langfuse
         @max_length = max_length
       end
 
-      def evaluate(input, output, expected: nil, context: nil)
+      def evaluate(_input, output, expected: nil, context: nil)
         length = output.to_s.length
 
         if @min_length && @max_length
@@ -156,7 +158,7 @@ module Langfuse
         @pattern = pattern.is_a?(Regexp) ? pattern : Regexp.new(pattern)
       end
 
-      def evaluate(input, output, expected: nil, context: nil)
+      def evaluate(_input, output, expected: nil, context: nil)
         match = @pattern.match(output.to_s)
         score = match ? 1 : 0
 
@@ -172,7 +174,7 @@ module Langfuse
         super(name: name, description: description)
       end
 
-      def evaluate(input, output, expected: nil, context: nil)
+      def evaluate(_input, output, expected: nil, context: nil)
         return create_score(value: 0, comment: 'No expected value provided') unless expected
 
         # Simple character-based similarity (Levenshtein distance)
@@ -230,10 +232,10 @@ module Langfuse
       def evaluate(input, output, expected: nil, context: nil)
         # This is a placeholder for LLM-based evaluation
         # In a real implementation, you would call an LLM API here
-        prompt = @prompt_template.gsub('{input}', input.to_s)
-                                 .gsub('{output}', output.to_s)
-                                 .gsub('{expected}', expected.to_s)
-                                 .gsub('{context}', context.to_s)
+        @prompt_template.gsub('{input}', input.to_s)
+                        .gsub('{output}', output.to_s)
+                        .gsub('{expected}', expected.to_s)
+                        .gsub('{context}', context.to_s)
 
         # Simulate LLM response (in real implementation, call actual LLM)
         score = rand(0.0..1.0).round(2)

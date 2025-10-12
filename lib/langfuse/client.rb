@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'faraday'
 require 'faraday/net_http'
 require 'faraday/multipart'
@@ -549,7 +551,7 @@ module Langfuse
       rescue Faraday::TimeoutError => e
         raise TimeoutError, "Request timed out: #{e.message}"
       rescue Faraday::ConnectionFailed => e
-        if retries_left > 0
+        if retries_left.positive?
           retries_left -= 1
           sleep(2**(@retries - retries_left))
           retry
