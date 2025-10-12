@@ -11,27 +11,29 @@ RSpec.describe Langfuse::Client do
     )
   end
 
-  describe '#initialize' do
-    it 'initializes with provided credentials' do
-      expect(client.public_key).to eq('test_key')
-      expect(client.secret_key).to eq('test_secret')
-      expect(client.host).to eq('https://test.langfuse.com')
-    end
+  describe 'initialization' do
+    describe '#initialize' do
+      it 'initializes with provided credentials' do
+        expect(client.public_key).to eq('test_key')
+        expect(client.secret_key).to eq('test_secret')
+        expect(client.host).to eq('https://test.langfuse.com')
+      end
 
-    it 'raises error without public key' do
-      expect do
-        Langfuse::Client.new(secret_key: 'test_secret')
-      end.to raise_error(Langfuse::AuthenticationError, 'Public key is required')
-    end
+      it 'raises error without public key' do
+        expect do
+          Langfuse::Client.new(secret_key: 'test_secret')
+        end.to raise_error(Langfuse::AuthenticationError, 'Public key is required')
+      end
 
-    it 'raises error without secret key' do
-      expect do
-        Langfuse::Client.new(public_key: 'test_key')
-      end.to raise_error(Langfuse::AuthenticationError, 'Secret key is required')
+      it 'raises error without secret key' do
+        expect do
+          Langfuse::Client.new(public_key: 'test_key')
+        end.to raise_error(Langfuse::AuthenticationError, 'Secret key is required')
+      end
     end
   end
 
-  describe '#trace' do
+  describe 'trace operations' do
     it 'creates a new trace' do
       trace = client.trace(name: 'test_trace')
 
@@ -41,7 +43,7 @@ RSpec.describe Langfuse::Client do
     end
   end
 
-  describe '#span' do
+  describe 'span operations' do
     it 'creates a new span' do
       span = client.span(trace_id: 'test_trace_id', name: 'test_span')
 
@@ -51,7 +53,7 @@ RSpec.describe Langfuse::Client do
     end
   end
 
-  describe '#generation' do
+  describe 'generation operations' do
     it 'creates a new generation' do
       generation = client.generation(
         trace_id: 'test_trace_id',
@@ -65,7 +67,7 @@ RSpec.describe Langfuse::Client do
     end
   end
 
-  describe '#score' do
+  describe 'scoring operations' do
     it 'creates a score' do
       expect(client).to receive(:enqueue_event).with('score-create', hash_including(
                                                                        name: 'test_score',
@@ -81,25 +83,27 @@ RSpec.describe Langfuse::Client do
     end
   end
 
-  describe '#flush' do
-    it 'flushes events when queue is not empty' do
-      client.instance_variable_set(:@event_queue, [{ id: 'test', type: 'test', body: {} }])
+  describe 'event management' do
+    describe '#flush' do
+      it 'flushes events when queue is not empty' do
+        client.instance_variable_set(:@event_queue, [{ id: 'test', type: 'test', body: {} }])
 
-      expect(client).to receive(:post).with('/api/public/ingestion', hash_including(:batch))
+        expect(client).to receive(:post).with('/api/public/ingestion', hash_including(:batch))
 
-      client.flush
-    end
+        client.flush
+      end
 
-    it 'does nothing when queue is empty' do
-      client.instance_variable_set(:@event_queue, [])
+      it 'does nothing when queue is empty' do
+        client.instance_variable_set(:@event_queue, [])
 
-      expect(client).not_to receive(:post)
+        expect(client).not_to receive(:post)
 
-      client.flush
+        client.flush
+      end
     end
   end
 
-  describe 'auto_flush configuration' do
+  describe 'auto_flush behavior' do
     it 'enables auto_flush by default' do
       client = Langfuse::Client.new(
         public_key: 'test_key',
@@ -120,7 +124,9 @@ RSpec.describe Langfuse::Client do
       expect(client.auto_flush).to be false
       expect(client.instance_variable_get(:@flush_thread)).to be_nil
     end
+  end
 
+  describe 'global configuration for auto_flush' do
     it 'respects global configuration for auto_flush' do
       Langfuse.configure do |config|
         config.auto_flush = false
@@ -139,7 +145,9 @@ RSpec.describe Langfuse::Client do
         config.auto_flush = true
       end
     end
+  end
 
+  describe 'environment variable for auto_flush' do
     it 'respects environment variable for auto_flush' do
       ENV['LANGFUSE_AUTO_FLUSH'] = 'false'
 
