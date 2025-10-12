@@ -87,39 +87,91 @@ This is the **Langfuse Ruby SDK** - a Ruby client library for Langfuse, an open-
 
 ## Common Development Commands
 
+### Setup and Installation
+```bash
+# Initialize development environment
+make setup
+
+# Install dependencies manually
+make install
+# or
+bundle install
+```
+
 ### Testing
 ```bash
-# Run all tests
+# Run RSpec tests
+make test
+# or
 rake spec
 # or
 bundle exec rspec
 
-# Run offline tests (additional test suite)
-ruby test_offline.rb
+# Run quick tests (without coverage)
+make quick-test
 
-# Run complete test suite (both online and offline)
+# Run tests with coverage report
+make test-coverage
+
+# Note: The Makefile references test_offline.rb but this file doesn't exist.
+# Use RSpec tests instead, which include both online and offline test scenarios via spec/support/offline_mode_helper.rb
 rake test_all
 ```
 
 ### Building and Releasing
 ```bash
 # Build the gem
+make build
+# or
 gem build langfuse-ruby.gemspec
 
 # Install locally
-gem install langfuse-ruby-*.gem
+make install-local
+# or
+gem install pkg/langfuse-ruby-*.gem
 
 # Release to RubyGems (requires permissions)
+make release
+# or
 rake release_gem
 ```
 
-### Code Quality
+### Code Quality and Development
 ```bash
 # Run RuboCop linting
+make lint
+# or
 bundle exec rubocop
 
+# Auto-fix RuboCop issues
+make lint-fix
+# or
+bundle exec rubocop -a
+
+# Format code (alias for lint-fix)
+make format
+
+# Run all checks (lint + test)
+make check
+
 # Generate documentation
+make docs
+# or
 bundle exec yard
+
+# Start documentation server
+make docs-serve
+
+# Start IRB console with gem loaded
+make console
+# or
+bundle exec irb -I lib -r langfuse
+
+# Show project status
+make status
+
+# Show version info
+make version
 ```
 
 ## Architecture Overview
@@ -169,9 +221,10 @@ Key configuration options:
 ## Testing Strategy
 
 - **RSpec tests**: Unit and integration tests in `spec/` directory
-- **Offline tests**: Additional tests in `test_offline.rb` that don't require API keys
+- **Offline Test Helper**: `spec/support/offline_mode_helper.rb` provides utilities for testing without API keys
 - **CI/CD**: GitHub Actions workflow tests across Ruby 2.7-3.3
 - **VCR**: Uses VCR for HTTP request mocking in tests
+- **Test Coverage**: Run `make test-coverage` for detailed coverage reports
 
 ## Examples
 
@@ -196,3 +249,12 @@ Development dependencies include RSpec, RuboCop, YARD, VCR, and WebMock for test
 ## Version Management
 
 Version is defined in `lib/langfuse/version.rb` and follows semantic versioning. The project supports Ruby >= 2.7.0.
+
+## Project Structure Tips
+
+- **Makefile**: The primary interface for development tasks - use `make help` to see all available commands
+- **Configuration**: Supports environment variables, global config via `Langfuse.configure`, and per-instance options
+- **Error Handling**: Comprehensive error hierarchy in `lib/langfuse/errors.rb` with specific exception types
+- **Debugging**: Enable debug mode via `debug: true` or `LANGFUSE_DEBUG=true` environment variable
+- **Background Processing**: Events are queued and flushed automatically; use `auto_flush: false` for manual control
+- **Thread Safety**: Uses concurrent-ruby for thread-safe event queuing and processing
