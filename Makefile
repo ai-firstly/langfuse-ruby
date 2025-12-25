@@ -42,12 +42,6 @@ test: ## 运行 RSpec 测试
 	@echo "$(BLUE)运行 RSpec 测试...$(RESET)"
 	@bundle exec rspec
 
-test-offline: ## 运行离线测试
-	@echo "$(BLUE)运行离线测试...$(RESET)"
-	@ruby test_offline.rb
-
-test-all: test test-offline ## 运行所有测试
-
 test-coverage: ## 运行测试并生成覆盖率报告
 	@echo "$(BLUE)运行测试并生成覆盖率报告...$(RESET)"
 	@bundle exec rspec --format documentation
