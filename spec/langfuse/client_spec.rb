@@ -195,4 +195,83 @@ RSpec.describe Langfuse::Client do
       expect { client.shutdown }.not_to raise_error
     end
   end
+
+  describe '#get_prompt' do
+    it 'URL-encodes prompt names with special characters' do
+      # Stub the HTTP request with WebMock
+      stub_request(:get, 'https://test.langfuse.com/api/public/v2/prompts/EXEMPLE%2Fmy-prompt')
+        .to_return(
+          status: 200,
+          body: {
+            id: 'test-id',
+            name: 'EXEMPLE/my-prompt',
+            version: 1,
+            prompt: 'test prompt',
+            type: 'text'
+          }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+
+      prompt = client.get_prompt('EXEMPLE/my-prompt')
+      expect(prompt).to be_a(Langfuse::Prompt)
+      expect(prompt.name).to eq('EXEMPLE/my-prompt')
+    end
+
+    it 'URL-encodes prompt names with spaces' do
+      stub_request(:get, 'https://test.langfuse.com/api/public/v2/prompts/my%20prompt')
+        .to_return(
+          status: 200,
+          body: {
+            id: 'test-id',
+            name: 'my prompt',
+            version: 1,
+            prompt: 'test prompt',
+            type: 'text'
+          }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+
+      prompt = client.get_prompt('my prompt')
+      expect(prompt).to be_a(Langfuse::Prompt)
+      expect(prompt.name).to eq('my prompt')
+    end
+
+    it 'URL-encodes prompt names with multiple special characters' do
+      stub_request(:get, 'https://test.langfuse.com/api/public/v2/prompts/test%2Fprompt%20name%3Fquery')
+        .to_return(
+          status: 200,
+          body: {
+            id: 'test-id',
+            name: 'test/prompt name?query',
+            version: 1,
+            prompt: 'test prompt',
+            type: 'text'
+          }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+
+      prompt = client.get_prompt('test/prompt name?query')
+      expect(prompt).to be_a(Langfuse::Prompt)
+      expect(prompt.name).to eq('test/prompt name?query')
+    end
+
+    it 'handles simple prompt names without special characters' do
+      stub_request(:get, 'https://test.langfuse.com/api/public/v2/prompts/simple-prompt')
+        .to_return(
+          status: 200,
+          body: {
+            id: 'test-id',
+            name: 'simple-prompt',
+            version: 1,
+            prompt: 'test prompt',
+            type: 'text'
+          }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+
+      prompt = client.get_prompt('simple-prompt')
+      expect(prompt).to be_a(Langfuse::Prompt)
+      expect(prompt.name).to eq('simple-prompt')
+    end
+  end
 end
