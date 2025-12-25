@@ -1,11 +1,12 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require 'langfuse'
 
 # Initialize the Langfuse client
 client = Langfuse.new(
-  public_key: ENV['LANGFUSE_PUBLIC_KEY'],
-  secret_key: ENV['LANGFUSE_SECRET_KEY'],
+  public_key: ENV.fetch('LANGFUSE_PUBLIC_KEY', nil),
+  secret_key: ENV.fetch('LANGFUSE_SECRET_KEY', nil),
   host: ENV['LANGFUSE_HOST'] || 'https://cloud.langfuse.com'
 )
 
@@ -57,7 +58,8 @@ begin
     prompt: [
       {
         role: 'system',
-        content: 'You are a helpful AI assistant specialized in {{domain}}. Always be {{tone}} and provide {{detail_level}} answers.'
+        content: 'You are a helpful AI assistant specialized in {{domain}}. Always be {{tone}} and ' \
+                 'provide {{detail_level}} answers.'
       },
       {
         role: 'user',
@@ -119,7 +121,8 @@ puts "Translation prompt: #{translated_prompt}"
 coding_template = Langfuse::ChatPromptTemplate.from_messages([
                                                                {
                                                                  role: 'system',
-                                                                 content: 'You are an expert {{language}} developer. Provide clean, well-commented code examples.'
+                                                                 content: 'You are an expert {{language}} developer. ' \
+                                                                          'Provide clean, well-commented code examples.'
                                                                },
                                                                {
                                                                  role: 'user',
@@ -187,7 +190,9 @@ begin
     model: 'gpt-3.5-turbo',
     input: messages,
     output: {
-      content: "Ruby blocks are pieces of code that can be passed to methods. They're defined using either do...end or curly braces {}. Blocks are commonly used with iterators like .each, .map, and .select."
+      content: "Ruby blocks are pieces of code that can be passed to methods. They're defined using " \
+               'either do...end or curly braces {}. Blocks are commonly used with iterators like ' \
+               '.each, .map, and .select.'
     },
     usage: {
       prompt_tokens: 45,
@@ -215,7 +220,8 @@ begin
     name: 'code-review-prompt',
     prompt: {
       system: 'You are a senior {{language}} developer reviewing code. Focus on {{review_aspects}}.',
-      user: "Please review this {{language}} code:\n\n```{{language}}\n{{code}}\n```\n\nProvide feedback on: {{specific_feedback}}"
+      user: "Please review this {{language}} code:\n\n```{{language}}\n{{code}}\n```\n\n" \
+            'Provide feedback on: {{specific_feedback}}'
     },
     labels: %w[code-review development],
     config: {
@@ -231,7 +237,7 @@ end
 
 # Create a prompt with conditional logic (using Ruby)
 class ConditionalPrompt
-  def self.generate(user_level:, topic:, include_examples: true)
+  def self.generate(user_level:, _topic:, include_examples: true)
     base_prompt = 'Explain {{topic}} for a {{user_level}} audience.'
 
     base_prompt += ' Include practical examples.' if include_examples

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Langfuse
   class Span
     attr_reader :id, :trace_id, :name, :start_time, :end_time, :input, :output,
@@ -110,11 +112,12 @@ module Langfuse
 
     def score(name:, value:, data_type: nil, comment: nil, **kwargs)
       @client.score(
-        observation_id: @id,
         name: name,
         value: value,
         data_type: data_type,
         comment: comment,
+        trace_id: @trace_id,
+        span_id: @id,
         **kwargs
       )
     end

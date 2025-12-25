@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'faraday'
 require 'faraday/net_http'
 require 'faraday/multipart'
@@ -9,12 +11,12 @@ module Langfuse
   class Client
     attr_reader :public_key, :secret_key, :host, :debug, :timeout, :retries, :flush_interval, :auto_flush
 
-    def initialize(public_key: nil, secret_key: nil, host: nil, debug: false, timeout: 30, retries: 3,
+    def initialize(public_key: nil, secret_key: nil, host: nil, debug: nil, timeout: 30, retries: 3,
                    flush_interval: nil, auto_flush: nil)
       @public_key = public_key || ENV['LANGFUSE_PUBLIC_KEY'] || Langfuse.configuration.public_key
       @secret_key = secret_key || ENV['LANGFUSE_SECRET_KEY'] || Langfuse.configuration.secret_key
       @host = host || ENV['LANGFUSE_HOST'] || Langfuse.configuration.host
-      @debug = debug || Langfuse.configuration.debug
+      @debug = debug.nil? ? (ENV['LANGFUSE_DEBUG'] == 'true' || Langfuse.configuration.debug) : debug
       @timeout = timeout || Langfuse.configuration.timeout
       @retries = retries || Langfuse.configuration.retries
       @flush_interval = flush_interval || ENV['LANGFUSE_FLUSH_INTERVAL']&.to_i || Langfuse.configuration.flush_interval
@@ -24,8 +26,8 @@ module Langfuse
                       auto_flush
                     end
 
-      raise AuthenticationError, 'Public key is required' unless @public_key
-      raise AuthenticationError, 'Secret key is required' unless @secret_key
+      raise AuthenticationError, 'Public key is required' unless @public_key && !@public_key.empty?
+      raise AuthenticationError, 'Secret key is required' unless @secret_key && !@secret_key.empty?
 
       @connection = build_connection
       @event_queue = Concurrent::Array.new
@@ -170,7 +172,7 @@ module Langfuse
     end
 
     # Score/Evaluation operations
-    def score(name:, value:, trace_id: nil, observation_id: nil, data_type: nil, comment: nil, **kwargs)
+    def score(name:, value:, trace_id: nil, observation_id: nil, generation_id: nil, span_id: nil, data_type: nil, comment: nil, **kwargs)
       data = {
         name: name,
         value: value,
@@ -181,6 +183,8 @@ module Langfuse
 
       data[:trace_id] = trace_id if trace_id
       data[:observation_id] = observation_id if observation_id
+      data[:generation_id] = generation_id if generation_id
+      data[:span_id] = span_id if span_id
 
       enqueue_event('score-create', data)
     end
@@ -395,7 +399,7 @@ module Langfuse
       rescue Faraday::TimeoutError => e
         raise TimeoutError, "Request timed out: #{e.message}"
       rescue Faraday::ConnectionFailed => e
-        if retries_left > 0
+        if retries_left.positive?
           retries_left -= 1
           sleep(2**(@retries - retries_left))
           retry
@@ -417,11 +421,12 @@ module Langfuse
       when 404
         # 404 错误通常返回 HTML 页面
         error_message = 'Resource not found (404)'
-        if response.body.is_a?(String) && response.body.include?('<!DOCTYPE html>')
-          error_message += '. Server returned HTML page instead of JSON API response. This usually means the requested resource does not exist.'
-        else
-          error_message += ": #{response.body}"
-        end
+        error_message += if response.body.is_a?(String) && response.body.include?('<!DOCTYPE html>')
+                           '. Server returned HTML page instead of JSON API response. ' \
+                             'This usually means the requested resource does not exist.'
+                         else
+                           ": #{response.body}"
+                         end
         raise ValidationError, error_message
       when 429
         raise RateLimitError, "Rate limit exceeded: #{response.body}"
@@ -440,7 +445,8 @@ module Langfuse
         end
 
         raise ValidationError,
-              "Event type validation failed (#{response.status}): The event type or structure is invalid. Please check the event format.#{error_details}"
+              "Event type validation failed (#{response.status}): The event type or structure is " \
+              "invalid. Please check the event format.#{error_details}"
 
       when 500..599
         raise APIError, "Server error (#{response.status}): #{response.body}"

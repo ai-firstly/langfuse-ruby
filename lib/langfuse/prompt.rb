@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Langfuse
   class Prompt
     attr_reader :id, :name, :version, :prompt, :config, :labels, :tags, :type, :created_at, :updated_at
@@ -135,6 +137,11 @@ module Langfuse
     end
 
     def format(variables = {})
+      missing_variables = @input_variables - variables.keys.map(&:to_s)
+      unless missing_variables.empty?
+        raise ValidationError, "Missing required variable: #{missing_variables.join(', ')}"
+      end
+
       compiled = @template.dup
       variables.each do |key, value|
         compiled.gsub!("{{#{key}}}", value.to_s)
@@ -148,14 +155,12 @@ module Langfuse
       new(template: template, input_variables: variables)
     end
 
-    private
-
     def self.extract_variables(text)
       variables = []
 
       # Match {{variable}} format
       text.scan(/\{\{(\w+)\}\}/) do |match|
-        variables << match[0]
+        variables << match[0] unless variables.include?(match[0])
       end
 
       # Match {variable} format
@@ -176,17 +181,21 @@ module Langfuse
     end
 
     def format(variables = {})
+      missing_variables = @input_variables - variables.keys.map(&:to_s)
+      unless missing_variables.empty?
+        raise ValidationError, "Missing required variable: #{missing_variables.join(', ')}"
+      end
+
       @messages.map do |message|
+        compiled_message = message.dup
         compiled_content = message[:content].dup
         variables.each do |key, value|
           compiled_content.gsub!("{{#{key}}}", value.to_s)
           compiled_content.gsub!("{#{key}}", value.to_s)
         end
 
-        {
-          role: message[:role],
-          content: compiled_content
-        }
+        compiled_message[:content] = compiled_content
+        compiled_message
       end
     end
 

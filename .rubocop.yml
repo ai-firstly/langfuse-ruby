@@ -1,0 +1,47 @@
+AllCops:
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - 'vendor/**/*'
+    - 'tmp/**/*'
+    - 'node_modules/**/*'
+
+# 禁用所有代码复杂度检查 - 代码简练优先
+Metrics:
+  Enabled: false
+
+# 禁用文档注释要求 - 不喜欢形式化
+Style/Documentation:
+  Enabled: false
+
+# 行长度适当放宽，但保留检查
+Layout/LineLength:
+  Max: 120
+  AllowHeredoc: true
+  AllowURI: true
+
+# RSpec 块长度放宽
+Metrics/BlockLength:
+  Enabled: true
+  Max: 25
+  Exclude:
+    - 'spec/**/*'
+    - 'test/**/*'
+    - '*.gemspec'
+
+# 方法名规范放宽 - get_ 前缀是常见习惯
+Naming/AccessorMethodName:
+  Enabled: false
+
+# 未使用参数用下划线前缀标记即可
+Lint/UnusedMethodArgument:
+  AllowUnusedKeywordArguments: true
+  IgnoreEmptyMethods: true
+
+# Gemspec 开发依赖 - 允许在 gemspec 中声明
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+# 谓词方法命名 - check_ 前缀是常见习惯
+Naming/PredicateMethod:
+  Enabled: false

@@ -26,7 +26,7 @@ jobs:
       run: ruby test_offline.rb
     
     - name: Build gem
-      run: gem build langfuse.gemspec
+      run: gem build langfuse-ruby.gemspec
     
     - name: Publish to RubyGems
       run: |
@@ -48,4 +48,4 @@ jobs:
           Changes in this Release
           - Check CHANGELOG.md for details
         draft: false
-        prerelease: false 
+        prerelease: false  
