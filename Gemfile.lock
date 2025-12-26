@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    langfuse-ruby (0.2.0)
+    langfuse-ruby (0.1.5)
       concurrent-ruby (~> 1.0)
       faraday (>= 1.8, < 3.0)
       faraday-multipart (~> 1.0)
