@@ -7,14 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2025-12-26
+
+### Added
+- Support for all enhanced observation types: `agent`, `tool`, `chain`, `retriever`, `embedding`, `evaluator`, `guardrail`
+- New `ObservationType` module with constants for all observation types
+- Convenience methods on `Client` and `Trace` for creating enhanced observations
+- New `as_type` parameter on `span()` method for specifying observation type
+- Comprehensive test coverage for enhanced observation types
+
 ### Fixed
 - Fixed URL encoding for prompt names containing special characters (/, spaces, etc.) in `get_prompt` method
 - Prompt names are now automatically URL-encoded before being interpolated into API paths
 
-### Added
+### Changed
+- Updated Ruby version requirement to >= 3.1.0
+- Environment variables moved from metadata to top-level trace attributes
+
+### Internal
 - Added `Utils.url_encode` helper method for consistent URL encoding across the SDK
-- Added comprehensive test coverage for URL encoding in prompt names
-- Added example demonstrating URL encoding functionality (`examples/url_encoding_demo.rb`)
+- CI improvements for offline test execution
 
 ## [0.1.4] - 2025-07-29
 

@@ -24,7 +24,9 @@ Gem::Specification.new do |spec|
   # Specify which files should be added to the gem when it is released.
   spec.files = Dir.chdir(File.expand_path(__dir__)) do
     if File.exist?('.git')
-      `git ls-files -z`.split("\x0").reject { |f| f.match(%r{\A(?:test|spec|features)/}) }
+      `git ls-files -z`.split("\x0").reject do |f|
+        (f == 'ISSUE_AIF-2_RESOLUTION.md') || f.match(%r{\A(?:test|spec|features)/})
+      end
     else
       Dir.glob('**/*').reject do |f|
         File.directory?(f) ||
