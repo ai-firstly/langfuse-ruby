@@ -2,7 +2,7 @@
 
 [![Gem Version](https://badge.fury.io/rb/langfuse-ruby.svg)](https://badge.fury.io/rb/langfuse-ruby)
 [![CI](https://github.com/ai-firstly/langfuse-ruby/workflows/CI/badge.svg)](https://github.com/ai-firstly/langfuse-ruby/actions/workflows/ci.yml)
-[![Ruby](https://img.shields.io/badge/ruby-%3E%3D%202.7.0-red.svg)](https://www.ruby-lang.org/)
+[![Ruby](https://img.shields.io/badge/ruby-%3E%3D%203.1.0-red.svg)](https://www.ruby-lang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Ruby SDK for [Langfuse](https://langfuse.com) - the open-source LLM engineering platform. This SDK provides comprehensive tracing, prompt management, and evaluation capabilities for LLM applications.
