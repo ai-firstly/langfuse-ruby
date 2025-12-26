@@ -55,7 +55,7 @@ module Langfuse
     # Span operations
     def span(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
              metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-             version: nil, **kwargs)
+             version: nil, as_type: nil, **kwargs)
       Span.new(
         client: self,
         trace_id: trace_id,
@@ -69,6 +69,159 @@ module Langfuse
         status_message: status_message,
         parent_observation_id: parent_observation_id,
         version: version,
+        as_type: as_type,
+        **kwargs
+      )
+    end
+
+    # Convenience methods for enhanced observation types
+
+    # Create an agent observation (wrapper around span with as_type: 'agent')
+    def agent(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+              metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+              version: nil, **kwargs)
+      span(
+        trace_id: trace_id,
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::AGENT,
+        **kwargs
+      )
+    end
+
+    # Create a tool observation (wrapper around span with as_type: 'tool')
+    def tool(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+             metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+             version: nil, **kwargs)
+      span(
+        trace_id: trace_id,
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::TOOL,
+        **kwargs
+      )
+    end
+
+    # Create a chain observation (wrapper around span with as_type: 'chain')
+    def chain(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+              metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+              version: nil, **kwargs)
+      span(
+        trace_id: trace_id,
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::CHAIN,
+        **kwargs
+      )
+    end
+
+    # Create a retriever observation (wrapper around span with as_type: 'retriever')
+    def retriever(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+                  metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+                  version: nil, **kwargs)
+      span(
+        trace_id: trace_id,
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::RETRIEVER,
+        **kwargs
+      )
+    end
+
+    # Create an embedding observation (wrapper around span with as_type: 'embedding')
+    def embedding(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+                  model: nil, usage: nil, metadata: nil, level: nil, status_message: nil,
+                  parent_observation_id: nil, version: nil, **kwargs)
+      merged_metadata = (metadata || {}).merge(
+        { model: model, usage: usage }.compact
+      )
+      span(
+        trace_id: trace_id,
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: merged_metadata.empty? ? nil : merged_metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::EMBEDDING,
+        **kwargs
+      )
+    end
+
+    # Create an evaluator observation (wrapper around span with as_type: 'evaluator')
+    def evaluator_obs(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+                      metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+                      version: nil, **kwargs)
+      span(
+        trace_id: trace_id,
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::EVALUATOR,
+        **kwargs
+      )
+    end
+
+    # Create a guardrail observation (wrapper around span with as_type: 'guardrail')
+    def guardrail(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+                  metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+                  version: nil, **kwargs)
+      span(
+        trace_id: trace_id,
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::GUARDRAIL,
         **kwargs
       )
     end

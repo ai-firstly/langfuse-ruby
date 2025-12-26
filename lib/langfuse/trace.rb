@@ -24,9 +24,10 @@ module Langfuse
       create_trace
     end
 
+    # Create a child span with optional type
     def span(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
              metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-             version: nil, **kwargs)
+             version: nil, as_type: nil, **kwargs)
       @client.span(
         trace_id: @id,
         name: name,
@@ -39,10 +40,12 @@ module Langfuse
         status_message: status_message,
         parent_observation_id: parent_observation_id,
         version: version,
+        as_type: as_type,
         **kwargs
       )
     end
 
+    # Create a child generation
     def generation(name: nil, start_time: nil, end_time: nil, completion_start_time: nil,
                    model: nil, model_parameters: nil, input: nil, output: nil, usage: nil,
                    metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
@@ -67,6 +70,7 @@ module Langfuse
       )
     end
 
+    # Create a child event
     def event(name:, start_time: nil, input: nil, output: nil, metadata: nil,
               level: nil, status_message: nil, parent_observation_id: nil, version: nil, **kwargs)
       @client.event(
@@ -80,6 +84,151 @@ module Langfuse
         status_message: status_message,
         parent_observation_id: parent_observation_id,
         version: version,
+        **kwargs
+      )
+    end
+
+    # Convenience methods for enhanced observation types
+
+    # Create a child agent observation
+    def agent(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+              metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+              version: nil, **kwargs)
+      span(
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::AGENT,
+        **kwargs
+      )
+    end
+
+    # Create a child tool observation
+    def tool(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+             metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+             version: nil, **kwargs)
+      span(
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::TOOL,
+        **kwargs
+      )
+    end
+
+    # Create a child chain observation
+    def chain(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+              metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+              version: nil, **kwargs)
+      span(
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::CHAIN,
+        **kwargs
+      )
+    end
+
+    # Create a child retriever observation
+    def retriever(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+                  metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+                  version: nil, **kwargs)
+      span(
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::RETRIEVER,
+        **kwargs
+      )
+    end
+
+    # Create a child embedding observation
+    def embedding(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+                  model: nil, usage: nil, metadata: nil, level: nil, status_message: nil,
+                  parent_observation_id: nil, version: nil, **kwargs)
+      merged_metadata = (metadata || {}).merge(
+        { model: model, usage: usage }.compact
+      )
+      span(
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: merged_metadata.empty? ? nil : merged_metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::EMBEDDING,
+        **kwargs
+      )
+    end
+
+    # Create a child evaluator observation
+    def evaluator(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+                  metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+                  version: nil, **kwargs)
+      span(
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::EVALUATOR,
+        **kwargs
+      )
+    end
+
+    # Create a child guardrail observation
+    def guardrail(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
+                  metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
+                  version: nil, **kwargs)
+      span(
+        name: name,
+        start_time: start_time,
+        end_time: end_time,
+        input: input,
+        output: output,
+        metadata: metadata,
+        level: level,
+        status_message: status_message,
+        parent_observation_id: parent_observation_id,
+        version: version,
+        as_type: ObservationType::GUARDRAIL,
         **kwargs
       )
     end
