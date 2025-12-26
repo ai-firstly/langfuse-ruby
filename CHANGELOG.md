@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fixed URL encoding for prompt names containing special characters (/, spaces, etc.) in `get_prompt` method
+- Prompt names are now automatically URL-encoded before being interpolated into API paths
+
+### Added
+- Added `Utils.url_encode` helper method for consistent URL encoding across the SDK
+- Added comprehensive test coverage for URL encoding in prompt names
+- Added example demonstrating URL encoding functionality (`examples/url_encoding_demo.rb`)
+
 ## [0.1.4] - 2025-07-29
 
 ### Added

@@ -1,5 +1,6 @@
 require 'securerandom'
 require 'time'
+require 'erb'
 
 module Langfuse
   module Utils
@@ -10,6 +11,10 @@ module Langfuse
 
       def current_timestamp
         Time.now.utc.iso8601(3)
+      end
+
+      def url_encode(string)
+        ERB::Util.url_encode(string.to_s)
       end
 
       def deep_symbolize_keys(hash)

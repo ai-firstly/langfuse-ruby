@@ -173,6 +173,9 @@ event = client.event(
 # Get a prompt
 prompt = client.get_prompt("chat-prompt", version: 1)
 
+# Prompt names with special characters are automatically URL-encoded
+prompt = client.get_prompt("EXEMPLE/my-prompt")  # Works correctly!
+
 # Compile prompt with variables
 compiled = prompt.compile(
   user_name: "Alice",
@@ -182,6 +185,8 @@ compiled = prompt.compile(
 puts compiled
 # Output: "Hello Alice! Let's discuss machine learning today."
 ```
+
+> **Note**: Prompt names containing special characters (like `/`, spaces, `?`, etc.) are automatically URL-encoded. You don't need to manually encode them.
 
 ### Create Prompts
 

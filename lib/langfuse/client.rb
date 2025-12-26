@@ -126,7 +126,8 @@ module Langfuse
         return cached_prompt[:prompt]
       end
 
-      path = "/api/public/v2/prompts/#{name}"
+      encoded_name = Utils.url_encode(name)
+      path = "/api/public/v2/prompts/#{encoded_name}"
       params = {}
       params[:version] = version if version
       params[:label] = label if label
