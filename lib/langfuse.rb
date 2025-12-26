@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'langfuse/version'
+require_relative 'langfuse/observation_types'
 require_relative 'langfuse/client'
 require_relative 'langfuse/trace'
 require_relative 'langfuse/span'
