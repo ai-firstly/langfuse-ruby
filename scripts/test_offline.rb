@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require_relative 'lib/langfuse'
+require_relative '../lib/langfuse'
 
 puts '🚀 Testing Langfuse Ruby SDK (Offline Mode)...'
 
