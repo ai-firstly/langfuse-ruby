@@ -38,17 +38,12 @@ bundle exec rake release_gem
 
 ### Core Classes
 
-- **`Langfuse::Client`** ([lib/langfuse/client.rb](lib/langfuse/client.rb)) - Main entry point. Handles API authentication, HTTP connections (via Faraday), event queuing with `Concurrent::Array`, and background flush thread for auto-batching events.
-
-- **`Langfuse::Trace`** ([lib/langfuse/trace.rb](lib/langfuse/trace.rb)) - Top-level container for a request/session. Creates child observations (spans, generations, events) and supports scoring.
-
-- **`Langfuse::Span`** ([lib/langfuse/span.rb](lib/langfuse/span.rb)) - Represents a timed operation. Supports enhanced observation types via `as_type` parameter (agent, tool, chain, retriever, embedding, evaluator, guardrail).
-
-- **`Langfuse::Generation`** ([lib/langfuse/generation.rb](lib/langfuse/generation.rb)) - LLM call tracking with model, usage, and cost data.
-
-- **`Langfuse::Event`** ([lib/langfuse/event.rb](lib/langfuse/event.rb)) - Generic point-in-time events for logging.
-
-- **`Langfuse::Prompt`** ([lib/langfuse/prompt.rb](lib/langfuse/prompt.rb)) - Prompt templates with variable compilation and caching.
+- **`Langfuse::Client`** ([lib/langfuse/client.rb](lib/langfuse/client.rb)) - Main entry point. Handles API authentication, HTTP connections (via Faraday), event queuing, and background flush thread for auto-batching events.
+- **`Langfuse::Trace`** ([lib/langfuse/trace.rb](lib/langfuse/trace.rb)) - Top-level container for a request/session.
+- **`Langfuse::Span`** ([lib/langfuse/span.rb](lib/langfuse/span.rb)) - Timed operation with enhanced type support.
+- **`Langfuse::Generation`** ([lib/langfuse/generation.rb](lib/langfuse/generation.rb)) - LLM call tracking.
+- **`Langfuse::Event`** ([lib/langfuse/event.rb](lib/langfuse/event.rb)) - Point-in-time events.
+- **`Langfuse::Prompt`** ([lib/langfuse/prompt.rb](lib/langfuse/prompt.rb)) - Prompt templates with caching.
 
 ### Event Flow
 

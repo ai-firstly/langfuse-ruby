@@ -4,7 +4,7 @@
 
 ### 1. 代码质量检查
 - [ ] 所有测试通过 (`bundle exec rspec`)
-- [ ] 离线测试通过 (`ruby test_offline.rb`)
+- [ ] 离线测试通过 (`ruby scripts/test_offline.rb`)
 - [ ] 代码风格检查 (`bundle exec rubocop`)
 - [ ] 文档更新完成
 
@@ -35,13 +35,13 @@
 ```bash
 # 1. 运行测试
 bundle exec rspec
-ruby test_offline.rb
+ruby scripts/test_offline.rb
 
 # 2. 构建 gem
 gem build langfuse.gemspec
 
 # 3. 发布到 RubyGems
-gem push langfuse-0.1.0.gem
+gem push langfuse-ruby-0.1.0.gem
 
 # 4. 创建 Git 标签
 git tag v0.1.0

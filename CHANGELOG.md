@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.4] - 2025-07-29
 
 ### Added
-- Added support for `trace-update` event type in Langfuse ingestion API
+- Added support for `trace` event type in Langfuse ingestion API
 - Added support for `event-create` event type in Langfuse ingestion API
 - New `Event` class for creating generic events within traces, spans, and generations
 - Added `event()` method to `Client`, `Trace`, `Span`, and `Generation` classes

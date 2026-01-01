@@ -5,9 +5,9 @@
 ## 📚 文档索引
 
 ### 开发和发布
-- [📋 发布指南](PUBLISH_GUIDE.md) - 详细的 gem 发布流程
-- [✅ 发布检查清单](RELEASE_CHECKLIST.md) - 发布前的检查项目
-- [🎯 最终总结](FINAL_SUMMARY.md) - 项目完成情况总结
+- [📋 发布指南](PUBLISH_GUIDE.md)
+- [✅ 发布检查清单](RELEASE_CHECKLIST.md)
+- [🎯 最终总结](FINAL_SUMMARY.md)
 
 ## 🔗 相关链接
 

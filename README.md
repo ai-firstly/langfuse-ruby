@@ -498,6 +498,14 @@ Check out the `examples/` directory for more comprehensive examples:
 - [Evaluation Pipeline](examples/evaluation_pipeline.rb)
 - [Rails Integration](examples/rails_integration.rb)
 
+## Documentation
+
+For more detailed information, please refer to the [documentation](docs/README.md).
+
+- [Publishing Guide](docs/PUBLISH_GUIDE.md)
+- [Release Checklist](docs/RELEASE_CHECKLIST.md)
+- [Examples](examples/)
+
 ## Development
 
 After checking out the repo, run:
@@ -530,7 +538,6 @@ The gem is available as open source under the terms of the [MIT License](https:/
 
 ## Links
 
-- [Langfuse Documentation](https://langfuse.com/docs)
-- [Langfuse GitHub](https://github.com/langfuse/langfuse)
-- [API Reference](https://api.reference.langfuse.com)
-- [Ruby SDK Documentation](https://rubydoc.info/gems/langfuse-ruby) 
+- [Langfuse Ruby SDK Documentation](https://rubydoc.info/gems/langfuse-ruby)
+- [RubyGems](https://rubygems.org/gems/langfuse-ruby)
+- [Langfuse Documentation](https://langfuse.com/docs) 

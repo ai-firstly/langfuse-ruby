@@ -9,13 +9,13 @@ task default: :spec
 # Custom release task
 desc 'Release gem to RubyGems'
 task release_gem: [:build] do
-  sh "gem push pkg/langfuse-ruby-#{Langfuse::VERSION}.gem"
+  sh "gem push langfuse-ruby-#{Langfuse::VERSION}.gem"
 end
 
 # Offline test task
 desc 'Run offline tests'
 task :test_offline do
-  sh 'ruby test_offline.rb'
+  sh 'ruby scripts/test_offline.rb'
 end
 
 # Complete test suite

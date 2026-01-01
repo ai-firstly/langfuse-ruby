@@ -23,7 +23,7 @@ jobs:
       run: bundle exec rspec
     
     - name: Run offline tests
-      run: ruby test_offline.rb
+      run: ruby scripts/test_offline.rb
     
     - name: Build gem
       run: gem build langfuse.gemspec

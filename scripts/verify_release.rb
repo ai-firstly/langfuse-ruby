@@ -78,10 +78,10 @@ end
 
 # Run checks
 puts "\n🔍 Checking RubyGems availability..."
-gem_available = check_rubygems('langfuse', current_version)
+gem_available = check_rubygems('langfuse-ruby', current_version)
 
 puts "\n🔍 Checking version availability..."
-version_available = check_version_availability('langfuse', current_version)
+version_available = check_version_availability('langfuse-ruby', current_version)
 
 # Test local installation
 puts "\n🔍 Testing local gem functionality..."
@@ -134,6 +134,6 @@ else
 end
 
 puts "\n🔗 Useful links:"
-puts '   - RubyGems page: https://rubygems.org/gems/langfuse'
+puts '   - RubyGems page: https://rubygems.org/gems/langfuse-ruby'
 puts '   - Documentation: https://github.com/ai-firstly/langfuse-ruby'
 puts '   - Issues: https://github.com/ai-firstly/langfuse-ruby/issues'

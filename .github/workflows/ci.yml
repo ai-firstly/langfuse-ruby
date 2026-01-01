@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ master ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ master ]
 
 jobs:
   test:
@@ -27,7 +27,7 @@ jobs:
       run: bundle exec rspec
 
     - name: Run offline tests
-      run: bundle exec ruby test_offline.rb
+      run: bundle exec ruby scripts/test_offline.rb
 
     - name: Run RuboCop
       run: bundle exec rubocop

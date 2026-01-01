@@ -76,7 +76,7 @@ gem uninstall langfuse-ruby
 bundle exec rspec
 
 # 运行离线测试
-ruby test_offline.rb
+ruby scripts/test_offline.rb
 
 # 检查代码质量（可选）
 bundle exec rubocop
@@ -218,7 +218,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.0
+          ruby-version: '3.1'
           bundler-cache: true
       
       - name: Run tests

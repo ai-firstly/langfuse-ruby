@@ -16,7 +16,7 @@
 - ✅ **工具类** - ID生成、时间戳、数据转换
 
 ### 技术规格
-- **Ruby版本**: >= 2.7.0
+- **Ruby版本**: >= 3.1.0
 - **依赖项**: Faraday, concurrent-ruby, json
 - **测试**: RSpec + 离线测试 (23个测试全部通过)
 - **文档**: 完整的README、API文档、示例代码
@@ -83,7 +83,7 @@ vim langfuse.gemspec
 # 初始化 Git 仓库
 git init
 git add .
-git commit -m "Initial commit: Langfuse Ruby SDK v0.1.0"
+git commit -m "Initial commit: Langfuse Ruby SDK v#{Langfuse::VERSION}"
 
 # 创建 GitHub 仓库并推送
 git remote add origin https://github.com/您的用户名/langfuse-ruby.git
@@ -97,16 +97,16 @@ git push -u origin main
 
 # 方法 2: 手动发布
 gem build langfuse.gemspec
-gem push langfuse-0.1.0.gem
+gem push langfuse-ruby-#{Langfuse::VERSION}.gem
 ```
 
 ### 3. 验证发布
 ```bash
 # 运行验证脚本
-ruby scripts/verify_release.rb
+ruby scripts/test_offline.rb
 
 # 手动验证
-gem install langfuse  # 或您的 gem 名称
+gem install langfuse-ruby
 ruby -e "require 'langfuse'; puts Langfuse::VERSION"
 ```
 

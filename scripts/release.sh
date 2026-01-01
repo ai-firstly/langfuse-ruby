@@ -49,7 +49,7 @@ if ! bundle exec rspec; then
 fi
 
 print_status "Running offline tests..."
-if ! ruby test_offline.rb; then
+if ! ruby scripts/test_offline.rb; then
     print_error "Offline tests failed. Please fix them before releasing."
     exit 1
 fi
