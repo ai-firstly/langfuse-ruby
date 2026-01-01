@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require_relative '../lib/langfuse'
 
@@ -26,7 +27,7 @@ puts "   自动刷新: #{client_auto.auto_flush}"
 puts "   刷新间隔: #{client_auto.flush_interval}秒"
 
 # 创建一些事件
-trace_auto = client_auto.trace(
+client_auto.trace(
   name: 'auto-flush-demo',
   input: { message: '这是自动刷新演示' },
   metadata: { demo: true }
@@ -60,7 +61,7 @@ trace_manual = client_manual.trace(
   metadata: { demo: true }
 )
 
-generation_manual = trace_manual.generation(
+trace_manual.generation(
   name: 'manual-generation',
   model: 'gpt-3.5-turbo',
   input: [{ role: 'user', content: 'Hello!' }],

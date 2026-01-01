@@ -1,0 +1,66 @@
+AllCops:
+  TargetRubyVersion: 3.1
+  NewCops: enable
+  Exclude:
+    - 'bin/*'
+    - 'vendor/**/*'
+    - 'spec/fixtures/**/*'
+    - 'scripts/**/*'
+    - 'examples/**/*'
+    - 'langfuse-ruby.gemspec'
+    - 'Gemfile'
+    - 'Rakefile'
+  SuggestExtensions: false
+
+Layout/LineLength:
+  Max: 160
+
+Style/Documentation:
+  Enabled: false
+
+Style/FrozenStringLiteralComment:
+  Enabled: true
+  EnforcedStyle: always
+
+Style/ConditionalAssignment:
+  Enabled: false
+
+Style/IfUnlessModifier:
+  Enabled: false
+
+Metrics/BlockLength:
+  Exclude:
+    - 'spec/**/*'
+    - 'langfuse-ruby.gemspec'
+
+Metrics/MethodLength:
+  Max: 50
+  Exclude:
+    - 'scripts/**/*'
+
+Metrics/AbcSize:
+  Max: 50
+  Exclude:
+    - 'scripts/**/*'
+
+Metrics/CyclomaticComplexity:
+  Max: 20
+
+Metrics/PerceivedComplexity:
+  Max: 20
+
+Metrics/ParameterLists:
+  Enabled: false
+
+Naming/AccessorMethodName:
+  Enabled: false
+
+Style/AsciiComments:
+  Enabled: false
+
+Lint/UnusedMethodArgument:
+  Exclude:
+    - 'lib/langfuse/evaluation.rb'
+
+Metrics/ClassLength:
+  Max: 600

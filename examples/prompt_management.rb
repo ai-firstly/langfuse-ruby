@@ -1,11 +1,12 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require 'langfuse'
 
 # Initialize the Langfuse client
 client = Langfuse.new(
-  public_key: ENV['LANGFUSE_PUBLIC_KEY'],
-  secret_key: ENV['LANGFUSE_SECRET_KEY'],
+  public_key: ENV.fetch('LANGFUSE_PUBLIC_KEY', nil),
+  secret_key: ENV.fetch('LANGFUSE_SECRET_KEY', nil),
   host: ENV['LANGFUSE_HOST'] || 'https://cloud.langfuse.com'
 )
 

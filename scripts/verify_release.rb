@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 # Langfuse Ruby SDK Release Verification Script
 require 'net/http'
@@ -94,7 +95,7 @@ begin
 
   # Test client creation (without real credentials)
   begin
-    client = Langfuse.new(public_key: 'test', secret_key: 'test')
+    Langfuse.new(public_key: 'test', secret_key: 'test')
     puts '✅ Client creation successful'
   rescue Langfuse::AuthenticationError
     puts '✅ Authentication error expected (no real credentials)'

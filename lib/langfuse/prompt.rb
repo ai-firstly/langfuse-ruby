@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Langfuse
   class Prompt
     attr_reader :id, :name, :version, :prompt, :config, :labels, :tags, :type, :created_at, :updated_at
@@ -147,8 +149,6 @@ module Langfuse
       variables = extract_variables(template)
       new(template: template, input_variables: variables)
     end
-
-    private
 
     def self.extract_variables(text)
       variables = []

@@ -20,6 +20,7 @@ Gem::Specification.new do |spec|
   spec.metadata['changelog_uri'] = 'https://github.com/ai-firstly/langfuse-ruby/blob/main/CHANGELOG.md'
   spec.metadata['documentation_uri'] = 'https://rubydoc.info/gems/langfuse-ruby'
   spec.metadata['bug_tracker_uri'] = 'https://github.com/ai-firstly/langfuse-ruby/issues'
+  spec.metadata['rubygems_mfa_required'] = 'true'
 
   # Specify which files should be added to the gem when it is released.
   spec.files = Dir.chdir(File.expand_path(__dir__)) do
@@ -44,8 +45,8 @@ Gem::Specification.new do |spec|
   # Dependencies
   spec.add_dependency 'concurrent-ruby', '~> 1.0'
   spec.add_dependency 'faraday', '>= 1.8', '< 3.0'
-  spec.add_dependency 'faraday-net_http', '>= 1.0', '< 4.0'
   spec.add_dependency 'faraday-multipart', '~> 1.0'
+  spec.add_dependency 'faraday-net_http', '>= 1.0', '< 4.0'
   spec.add_dependency 'json', '~> 2.0'
 
   # Development dependencies

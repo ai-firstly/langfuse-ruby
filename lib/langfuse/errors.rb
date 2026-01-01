@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Langfuse
   class Error < StandardError; end
   class AuthenticationError < Error; end

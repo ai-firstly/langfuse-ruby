@@ -89,7 +89,7 @@ GEM
     yard (0.9.37)
 
 PLATFORMS
-  arm64-darwin-23
+  arm64-darwin
   ruby
 
 DEPENDENCIES
@@ -97,7 +97,7 @@ DEPENDENCIES
   langfuse-ruby!
   rake (~> 13.0)
   rspec (~> 3.0)
-  rubocop (~> 1.21)
+  rubocop (~> 1.0)
   vcr (~> 6.0)
   webmock (~> 3.0)
   yard (~> 0.9)

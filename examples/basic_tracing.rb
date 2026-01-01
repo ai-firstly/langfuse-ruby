@@ -1,11 +1,12 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require 'langfuse'
 
 # Initialize the Langfuse client
 client = Langfuse.new(
-  public_key: ENV['LANGFUSE_PUBLIC_KEY'],
-  secret_key: ENV['LANGFUSE_SECRET_KEY'],
+  public_key: ENV.fetch('LANGFUSE_PUBLIC_KEY', nil),
+  secret_key: ENV.fetch('LANGFUSE_SECRET_KEY', nil),
   host: ENV['LANGFUSE_HOST'] || 'https://cloud.langfuse.com'
 )
 
@@ -65,7 +66,7 @@ retrieval_span = workflow_trace.span(
 )
 
 # Embedding generation within retrieval
-embedding_gen = retrieval_span.generation(
+retrieval_span.generation(
   name: 'embedding-generation',
   model: 'text-embedding-ada-002',
   input: 'What is machine learning?',
@@ -158,7 +159,7 @@ puts "\n🚨 Example 4: Error handling"
 begin
   error_trace = client.trace(name: 'error-example')
 
-  error_gen = error_trace.generation(
+  error_trace.generation(
     name: 'failed-generation',
     model: 'gpt-3.5-turbo',
     input: [{ role: 'user', content: 'This will fail' }],

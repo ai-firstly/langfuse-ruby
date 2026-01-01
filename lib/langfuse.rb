@@ -25,8 +25,8 @@ module Langfuse
     end
 
     # Create a new Langfuse client instance
-    def new(**options)
-      Client.new(**options)
+    def new(**kwargs)
+      Client.new(**kwargs)
     end
   end
 

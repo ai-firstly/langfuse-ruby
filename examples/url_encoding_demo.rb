@@ -51,7 +51,7 @@ rescue Langfuse::ValidationError => e
   puts "✗ Error: #{e.message}"
 end
 
-puts "\n" + '=' * 60
+puts "\n#{'=' * 60}"
 puts 'Note: The client now automatically URL-encodes prompt names.'
 puts 'You no longer need to manually encode them!'
 puts '=' * 60

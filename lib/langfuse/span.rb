@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Langfuse
   class Span
     attr_reader :id, :trace_id, :name, :start_time, :end_time, :input, :output,
@@ -286,9 +288,7 @@ module Langfuse
       return nil if type.nil?
 
       type_str = type.to_s
-      unless ObservationType.valid?(type_str)
-        raise ValidationError, "Invalid observation type: #{type}. Valid types are: #{ObservationType::ALL.join(', ')}"
-      end
+      raise ValidationError, "Invalid observation type: #{type}. Valid types are: #{ObservationType::ALL.join(', ')}" unless ObservationType.valid?(type_str)
 
       type_str
     end
