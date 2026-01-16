@@ -38,12 +38,28 @@ bundle exec rake release_gem
 
 ### Core Classes
 
+- **`Langfuse`** ([lib/langfuse.rb](lib/langfuse.rb)) - Module with class-level convenience methods (`trace`, `get_prompt`, `client`, `flush`, `shutdown`, `reset!`)
 - **`Langfuse::Client`** ([lib/langfuse/client.rb](lib/langfuse/client.rb)) - Main entry point. Handles API authentication, HTTP connections (via Faraday), event queuing, and background flush thread for auto-batching events.
 - **`Langfuse::Trace`** ([lib/langfuse/trace.rb](lib/langfuse/trace.rb)) - Top-level container for a request/session.
 - **`Langfuse::Span`** ([lib/langfuse/span.rb](lib/langfuse/span.rb)) - Timed operation with enhanced type support.
 - **`Langfuse::Generation`** ([lib/langfuse/generation.rb](lib/langfuse/generation.rb)) - LLM call tracking.
 - **`Langfuse::Event`** ([lib/langfuse/event.rb](lib/langfuse/event.rb)) - Point-in-time events.
 - **`Langfuse::Prompt`** ([lib/langfuse/prompt.rb](lib/langfuse/prompt.rb)) - Prompt templates with caching.
+- **`Langfuse::NullTrace/NullGeneration/NullSpan`** ([lib/langfuse/null_objects.rb](lib/langfuse/null_objects.rb)) - Null objects for graceful degradation.
+
+### Simplified API (Recommended)
+
+```ruby
+# Block-based tracing with automatic flush
+Langfuse.trace("my-trace", user_id: "user-1") do |trace|
+  gen = trace.generation(name: "openai", model: "gpt-4", input: messages)
+  response = call_llm(...)
+  gen.end(output: response, usage: usage)
+end  # Auto flush!
+
+# Get prompt with variables and retry
+Langfuse.get_prompt("my-prompt", variables: { name: "Alice" }, retries: 3)
+```
 
 ### Event Flow
 
@@ -72,9 +88,13 @@ Client accepts config via:
 Custom exceptions in [lib/langfuse/errors.rb](lib/langfuse/errors.rb):
 - `AuthenticationError`, `APIError`, `NetworkError`, `ValidationError`, `RateLimitError`, `TimeoutError`
 
+Graceful degradation: When Langfuse is unavailable, `Langfuse.trace` yields a `NullTrace` that silently no-ops all operations.
+
 ## Key Implementation Details
 
 - Uses Faraday for HTTP with Basic Auth (public_key:secret_key)
 - Prompt names with special characters are auto-URL-encoded via `Utils.url_encode`
 - `trace-update` events merge into existing `trace-create` in queue (deduplication)
 - All keys are converted to camelCase before API submission via `Utils.deep_camelize_keys`
+- Thread-safe singleton client via `Thread.current[:langfuse_client]`
+- `get_prompt` supports configurable retries with exponential backoff
