@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Simplified API**: New class-level convenience methods for easier usage
+  - `Langfuse.trace(name, **options, &block)` - Block-based tracing with automatic flush
+  - `Langfuse.get_prompt(name, variables:, retries:)` - Get and compile prompts with retry support
+  - `Langfuse.client` - Thread-safe singleton client access
+  - `Langfuse.flush` / `Langfuse.shutdown` / `Langfuse.reset!` - Client lifecycle management
+- **Graceful Degradation**: Null object pattern for fault tolerance
+  - `NullTrace`, `NullGeneration`, `NullSpan`, `NullEvent` - No-op objects when Langfuse is unavailable
+- **Retry Support**: `get_prompt` now supports configurable retries with exponential backoff (default: 2 retries)
+- New example file `examples/simplified_usage.rb` demonstrating the simplified API
+- Comprehensive test coverage for convenience methods (28 new tests)
+
 ## [0.1.5] - 2025-12-26
 
 ### Added

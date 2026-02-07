@@ -85,6 +85,80 @@ trace.update(output: 'Hello! How can I help you today?')
 client.flush
 ```
 
+## Simplified Usage (Recommended)
+
+For most use cases, you can use the simplified class-level API with automatic flush:
+
+### Block-based Tracing
+
+```ruby
+require 'langfuse'
+
+# Configure once
+Langfuse.configure do |config|
+  config.public_key = ENV['LANGFUSE_PUBLIC_KEY']
+  config.secret_key = ENV['LANGFUSE_SECRET_KEY']
+end
+
+# Use block-based tracing - flush happens automatically!
+Langfuse.trace("my-trace", user_id: "user-1", input: { message: "Hello" }) do |trace|
+  generation = trace.generation(
+    name: "openai-chat",
+    model: "gpt-4",
+    input: [{ role: "user", content: "Hello" }],
+    model_parameters: { temperature: 0.7 }
+  )
+
+  # Call your LLM
+  response = call_openai(...)
+
+  # Record the response
+  generation.end(output: response.content, usage: response.usage)
+  trace.update(output: response.content)
+end  # Automatic flush here!
+```
+
+### Get Prompts with Variables
+
+```ruby
+# Get and compile a prompt in one call
+prompt = Langfuse.get_prompt("greeting-prompt", variables: { name: "Alice" })
+# => "Hello Alice! How can I help you today?"
+
+# Get prompt without compilation
+prompt_obj = Langfuse.get_prompt("greeting-prompt")
+compiled = prompt_obj.compile(name: "Bob")
+```
+
+### Graceful Degradation
+
+The simplified API includes null objects that ensure your code continues working even if Langfuse is unavailable:
+
+```ruby
+# If Langfuse fails, a NullTrace is used - your code still runs
+Langfuse.trace("my-trace") do |trace|
+  # This works even if Langfuse is down
+  gen = trace.generation(name: "test", model: "gpt-4", input: "hello")
+  gen.end(output: "world")
+end
+```
+
+### Other Class Methods
+
+```ruby
+# Get the thread-safe singleton client
+client = Langfuse.client
+
+# Manual flush (when not using block-based tracing)
+Langfuse.flush
+
+# Shutdown the client
+Langfuse.shutdown
+
+# Reset the singleton (useful for testing)
+Langfuse.reset!
+```
+
 ### 3. Nested Spans
 
 ```ruby
