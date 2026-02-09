@@ -26,7 +26,7 @@ lint-fix: ## Run RuboCop with auto-correct
 build: ## Build the gem
 	bundle exec rake build
 
-release: tag build ## Release: tag + build + push to RubyGems
+release: tag ## Release: tag + build + push to RubyGems
 	bundle exec rake release_gem
 
 clean: ## Remove built gem files
@@ -39,7 +39,7 @@ console: ## Start an IRB console with the gem loaded
 tag: ## Create and push a version tag. Usage: make tag [VERSION=x.y.z]
 	@git fetch --tags; \
 	if [ -z "$(VERSION)" ]; then \
-		LATEST=$$(git tag -l 'v*' --sort=-v:refname | head -n1); \
+		LATEST=$$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1); \
 		if [ -z "$$LATEST" ]; then \
 			NEW_TAG="v0.0.1"; \
 		else \
@@ -51,7 +51,7 @@ tag: ## Create and push a version tag. Usage: make tag [VERSION=x.y.z]
 		fi; \
 	else \
 		NEW_TAG="v$(VERSION)"; \
-		LATEST=$$(git tag -l 'v*' --sort=-v:refname | head -n1); \
+		LATEST=$$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1); \
 		if [ "$$LATEST" = "$$NEW_TAG" ]; then \
 			echo "Tag $$NEW_TAG already exists on remote, deleting and re-pushing..."; \
 			git tag -d "$$NEW_TAG" 2>/dev/null || true; \
