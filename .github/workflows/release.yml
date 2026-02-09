@@ -23,10 +23,10 @@ jobs:
       run: bundle exec rspec
     
     - name: Run offline tests
-      run: ruby scripts/test_offline.rb
+      run: bundle exec ruby scripts/test_offline.rb
     
     - name: Build gem
-      run: gem build langfuse.gemspec
+      run: gem build langfuse-ruby.gemspec
     
     - name: Publish to RubyGems
       run: |
@@ -38,14 +38,13 @@ jobs:
         RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
     
     - name: Create GitHub Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
+        files: "*.gem"
         body: |
           Changes in this Release
           - Check CHANGELOG.md for details
         draft: false
-        prerelease: false 
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
