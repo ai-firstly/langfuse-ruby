@@ -26,33 +26,64 @@
 
 ## 🚀 发布步骤
 
-### 方法 1: 使用发布脚本 (推荐)
+### 方法 1: 使用 GitHub Actions (推荐)
+
+> ⚠️ **重要**: 必须先运行 `bundle install` 更新 `Gemfile.lock`，否则 CI 会失败！
+
+#### 前提条件
+在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中配置：
+- `RUBYGEMS_API_KEY` - RubyGems API 密钥（在 [rubygems.org](https://rubygems.org) → Settings → API keys 中获取）
+
+> 注意：`GITHUB_TOKEN` 无需手动配置，GitHub Actions 会自动提供。
+
+#### 发布流程
+```bash
+# 1. 更新版本号
+# 编辑 lib/langfuse/version.rb
+
+# 2. 更新 Gemfile.lock（重要！）
+bundle install
+
+# 3. 提交更改
+git add .
+git commit -m "Bump version to x.x.x"
+
+# 4. 推送代码
+git push origin <branch>
+
+# 5. 创建并推送标签（触发自动发布）
+git tag vx.x.x
+git push origin vx.x.x
+```
+
+GitHub Actions 会自动：
+- 运行测试 (rspec + offline tests)
+- 构建 gem
+- 发布到 RubyGems
+- 创建 GitHub Release
+
+### 方法 2: 使用发布脚本
 ```bash
 ./scripts/release.sh
 ```
 
-### 方法 2: 手动发布
+### 方法 3: 手动发布
 ```bash
 # 1. 运行测试
 bundle exec rspec
 ruby scripts/test_offline.rb
 
 # 2. 构建 gem
-gem build langfuse.gemspec
+gem build langfuse-ruby.gemspec
 
 # 3. 发布到 RubyGems
-gem push langfuse-ruby-0.1.0.gem
+gem push langfuse-ruby-x.x.x.gem
 
 # 4. 创建 Git 标签
-git tag v0.1.0
+git tag vx.x.x
 git push origin main
-git push origin v0.1.0
+git push origin vx.x.x
 ```
-
-### 方法 3: 使用 GitHub Actions
-1. 推送代码到 GitHub
-2. 创建版本标签 (`git tag v0.1.0 && git push origin v0.1.0`)
-3. GitHub Actions 自动发布
 
 ## 📊 发布后验证
 
