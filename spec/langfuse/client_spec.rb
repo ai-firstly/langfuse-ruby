@@ -198,6 +198,118 @@ RSpec.describe Langfuse::Client do
     end
   end
 
+  describe 'ingestion_mode configuration' do
+    it 'defaults to legacy mode' do
+      expect(client.ingestion_mode).to eq(:legacy)
+    end
+
+    it 'accepts otel mode via constructor' do
+      otel_client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret',
+        host: 'https://test.langfuse.com',
+        ingestion_mode: :otel,
+        auto_flush: false
+      )
+
+      expect(otel_client.ingestion_mode).to eq(:otel)
+    end
+
+    it 'respects environment variable LANGFUSE_INGESTION_MODE' do
+      ENV['LANGFUSE_INGESTION_MODE'] = 'otel'
+
+      otel_client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret',
+        host: 'https://test.langfuse.com',
+        auto_flush: false
+      )
+
+      expect(otel_client.ingestion_mode).to eq(:otel)
+
+      ENV.delete('LANGFUSE_INGESTION_MODE')
+    end
+
+    it 'respects global configuration for ingestion_mode' do
+      Langfuse.configure do |config|
+        config.ingestion_mode = :otel
+      end
+
+      otel_client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret',
+        host: 'https://test.langfuse.com',
+        auto_flush: false
+      )
+
+      expect(otel_client.ingestion_mode).to eq(:otel)
+
+      Langfuse.configure do |config|
+        config.ingestion_mode = :legacy
+      end
+    end
+
+    it 'creates otel_exporter when in otel mode' do
+      otel_client = Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret',
+        host: 'https://test.langfuse.com',
+        ingestion_mode: :otel,
+        auto_flush: false
+      )
+
+      expect(otel_client.instance_variable_get(:@otel_exporter)).to be_a(Langfuse::OtelExporter)
+      expect(otel_client.instance_variable_get(:@otel_connection)).not_to be_nil
+    end
+
+    it 'does not create otel_exporter in legacy mode' do
+      expect(client.instance_variable_get(:@otel_exporter)).to be_nil
+      expect(client.instance_variable_get(:@otel_connection)).to be_nil
+    end
+  end
+
+  describe '#flush with OTEL mode' do
+    let(:otel_client) do
+      Langfuse::Client.new(
+        public_key: 'test_key',
+        secret_key: 'test_secret',
+        host: 'https://test.langfuse.com',
+        ingestion_mode: :otel,
+        auto_flush: false
+      )
+    end
+
+    it 'sends events via OTEL exporter' do
+      stub_request(:post, 'https://test.langfuse.com/api/public/otel/v1/traces')
+        .to_return(
+          status: 200,
+          body: '{}',
+          headers: { 'Content-Type' => 'application/json' }
+        )
+
+      trace = otel_client.trace(name: 'otel-test')
+      otel_client.flush
+
+      expect(WebMock).to have_requested(:post, 'https://test.langfuse.com/api/public/otel/v1/traces')
+    end
+
+    it 'includes x-langfuse-ingestion-version header' do
+      stub_request(:post, 'https://test.langfuse.com/api/public/otel/v1/traces')
+        .with(headers: { 'x-langfuse-ingestion-version' => '4' })
+        .to_return(
+          status: 200,
+          body: '{}',
+          headers: { 'Content-Type' => 'application/json' }
+        )
+
+      trace = otel_client.trace(name: 'otel-header-test')
+      otel_client.flush
+
+      expect(WebMock).to have_requested(:post, 'https://test.langfuse.com/api/public/otel/v1/traces')
+        .with(headers: { 'x-langfuse-ingestion-version' => '4' })
+    end
+  end
+
   describe '#get_prompt' do
     it 'URL-encodes prompt names with special characters' do
       # Stub the HTTP request with WebMock
