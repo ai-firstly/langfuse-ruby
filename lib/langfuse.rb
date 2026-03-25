@@ -12,6 +12,7 @@ require_relative 'langfuse/evaluation'
 require_relative 'langfuse/errors'
 require_relative 'langfuse/utils'
 require_relative 'langfuse/null_objects'
+require_relative 'langfuse/otel_exporter'
 
 # Ruby SDK for Langfuse - Open source LLM engineering platform
 module Langfuse
@@ -157,7 +158,8 @@ module Langfuse
 
   # Configuration class for Langfuse client settings
   class Configuration
-    attr_accessor :public_key, :secret_key, :host, :debug, :timeout, :retries, :flush_interval, :auto_flush
+    attr_accessor :public_key, :secret_key, :host, :debug, :timeout, :retries, :flush_interval, :auto_flush,
+                  :ingestion_mode
 
     def initialize
       @public_key = nil
@@ -168,6 +170,7 @@ module Langfuse
       @retries = 3
       @flush_interval = 5
       @auto_flush = true
+      @ingestion_mode = :legacy # :legacy or :otel
     end
   end
 end

@@ -9,10 +9,11 @@ require 'concurrent'
 
 module Langfuse
   class Client
-    attr_reader :public_key, :secret_key, :host, :debug, :timeout, :retries, :flush_interval, :auto_flush
+    attr_reader :public_key, :secret_key, :host, :debug, :timeout, :retries, :flush_interval, :auto_flush,
+                :ingestion_mode
 
     def initialize(public_key: nil, secret_key: nil, host: nil, debug: false, timeout: 30, retries: 3,
-                   flush_interval: nil, auto_flush: nil)
+                   flush_interval: nil, auto_flush: nil, ingestion_mode: nil)
       @public_key = public_key || ENV['LANGFUSE_PUBLIC_KEY'] || Langfuse.configuration.public_key
       @secret_key = secret_key || ENV['LANGFUSE_SECRET_KEY'] || Langfuse.configuration.secret_key
       @host = host || ENV['LANGFUSE_HOST'] || Langfuse.configuration.host
@@ -25,11 +26,14 @@ module Langfuse
                     else
                       auto_flush
                     end
+      @ingestion_mode = resolve_ingestion_mode(ingestion_mode)
 
       raise AuthenticationError, 'Public key is required' unless @public_key
       raise AuthenticationError, 'Secret key is required' unless @secret_key
 
       @connection = build_connection
+      @otel_connection = build_otel_connection if @ingestion_mode == :otel
+      @otel_exporter = OtelExporter.new(connection: @otel_connection, debug: @debug) if @ingestion_mode == :otel
       @event_queue = Concurrent::Array.new
       @flush_thread = start_flush_thread if @auto_flush
     end
@@ -452,16 +456,38 @@ module Langfuse
         return
       end
 
+      if @ingestion_mode == :otel
+        send_batch_otel(valid_events)
+      else
+        send_batch_legacy(valid_events)
+      end
+    end
+
+    def send_batch_legacy(valid_events)
       batch_data = build_batch_data(valid_events)
       puts "Sending batch data: #{batch_data}" if @debug
 
       begin
         response = post('/api/public/ingestion', batch_data)
-        puts "Flushed #{valid_events.length} events" if @debug
+        puts "Flushed #{valid_events.length} events (legacy)" if @debug
         response
       rescue StandardError => e
         puts "Failed to flush events: #{e.message}" if @debug
-        # Re-queue events on failure
+        valid_events.each { |event| @event_queue << event }
+        raise
+      end
+    end
+
+    def send_batch_otel(valid_events)
+      puts "Sending #{valid_events.length} events via OTEL" if @debug
+
+      begin
+        response = @otel_exporter.export(valid_events)
+        handle_response(response)
+        puts "Flushed #{valid_events.length} events (otel)" if @debug
+        response
+      rescue StandardError => e
+        puts "Failed to flush OTEL events: #{e.message}" if @debug
         valid_events.each { |event| @event_queue << event }
         raise
       end
@@ -493,6 +519,15 @@ module Langfuse
       end
     end
 
+    def resolve_ingestion_mode(explicit_mode)
+      return explicit_mode.to_sym if explicit_mode
+
+      env_mode = ENV['LANGFUSE_INGESTION_MODE']
+      return env_mode.to_sym if env_mode && !env_mode.empty?
+
+      Langfuse.configuration.ingestion_mode || :legacy
+    end
+
     def build_connection
       Faraday.new(url: @host) do |conn|
         # 配置请求和响应处理
@@ -512,6 +547,22 @@ module Langfuse
         conn.response :logger if @debug
 
         # 使用默认适配器
+        conn.adapter Faraday.default_adapter
+      end
+    end
+
+    # Build a separate Faraday connection for OTEL with the v4 ingestion header.
+    def build_otel_connection
+      Faraday.new(url: @host) do |conn|
+        conn.response :json, content_type: /\bjson$/
+
+        conn.headers['User-Agent'] = "langfuse-ruby/#{Langfuse::VERSION}"
+        conn.headers['Authorization'] = "Basic #{Base64.strict_encode64("#{@public_key}:#{@secret_key}")}"
+        conn.headers['x-langfuse-ingestion-version'] = '4'
+        conn.headers['Content-Type'] = 'application/json'
+
+        conn.options.timeout = @timeout
+        conn.response :logger if @debug
         conn.adapter Faraday.default_adapter
       end
     end

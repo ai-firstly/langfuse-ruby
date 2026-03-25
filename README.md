@@ -58,6 +58,36 @@ end
 client = Langfuse.new
 ```
 
+### OpenTelemetry (OTEL) Ingestion Mode
+
+Langfuse v4 introduces a faster data model powered by OpenTelemetry. To use
+it, enable the OTEL ingestion mode. This sends data via the OTLP/HTTP JSON
+endpoint (`/api/public/otel/v1/traces`) with the `x-langfuse-ingestion-version: 4`
+header for real-time ingestion and observation-level online evaluators.
+
+```ruby
+# Via constructor
+client = Langfuse.new(
+  public_key: "pk-lf-...",
+  secret_key: "sk-lf-...",
+  ingestion_mode: :otel
+)
+
+# Via global configuration
+Langfuse.configure do |config|
+  config.public_key = "pk-lf-..."
+  config.secret_key = "sk-lf-..."
+  config.ingestion_mode = :otel
+end
+
+# Via environment variable
+# LANGFUSE_INGESTION_MODE=otel
+```
+
+All existing tracing APIs work unchanged. The SDK maps Langfuse events to
+OpenTelemetry spans with the appropriate `langfuse.*` and `gen_ai.*` attributes.
+No additional dependencies are required.
+
 ### 2. Basic Tracing
 
 ```ruby
