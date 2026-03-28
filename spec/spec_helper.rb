@@ -1,5 +1,12 @@
 # frozen_string_literal: true
 
+require 'simplecov'
+SimpleCov.start do
+  add_filter '/spec/'
+  track_files 'lib/**/*.rb'
+  minimum_coverage 90
+end
+
 require 'bundler/setup'
 require_relative '../lib/langfuse'
 require 'webmock/rspec'

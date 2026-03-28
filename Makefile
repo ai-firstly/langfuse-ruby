@@ -1,4 +1,4 @@
-.PHONY: install test spec test-offline test-all lint lint-fix build release clean console help tag
+.PHONY: install test spec test-offline test-all lint lint-fix build release clean console help tag coverage
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -16,6 +16,10 @@ test-all: ## Run all tests (spec + offline)
 	bundle exec rake test_all
 
 test: spec ## Alias for spec
+
+coverage: ## Run tests and open coverage report
+	bundle exec rake spec
+	open coverage/index.html
 
 lint: ## Run RuboCop linter
 	bundle exec rubocop
