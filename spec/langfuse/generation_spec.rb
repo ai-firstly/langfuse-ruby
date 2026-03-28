@@ -54,10 +54,10 @@ RSpec.describe Langfuse::Generation do
 
     it 'enqueues a generation-create event' do
       expect(client).to receive(:enqueue_event).with('generation-create', hash_including(
-        trace_id: 'trace-1',
-        name: 'test-gen',
-        model: 'gpt-4'
-      ))
+                                                                            trace_id: 'trace-1',
+                                                                            name: 'test-gen',
+                                                                            model: 'gpt-4'
+                                                                          ))
 
       client.generation(trace_id: 'trace-1', name: 'test-gen', model: 'gpt-4')
     end
@@ -121,9 +121,9 @@ RSpec.describe Langfuse::Generation do
     it 'enqueues a generation-update event' do
       expect(client).to receive(:enqueue_event).with('generation-create', anything)
       expect(client).to receive(:enqueue_event).with('generation-update', hash_including(
-        trace_id: 'trace-1',
-        name: 'updated'
-      ))
+                                                                            trace_id: 'trace-1',
+                                                                            name: 'updated'
+                                                                          ))
 
       generation.update(name: 'updated')
     end
@@ -162,8 +162,8 @@ RSpec.describe Langfuse::Generation do
     it 'enqueues a generation-update event' do
       expect(client).to receive(:enqueue_event).with('generation-create', anything)
       expect(client).to receive(:enqueue_event).with('generation-update', hash_including(
-        trace_id: 'trace-1'
-      ))
+                                                                            trace_id: 'trace-1'
+                                                                          ))
 
       generation.end
     end

@@ -128,9 +128,9 @@ RSpec.describe Langfuse::Prompt do
         result = prompt.compile(company: 'Acme', topic: 'AI')
 
         expect(result).to eq([
-          { role: 'system', content: 'You are a helpful assistant for Acme.' },
-          { role: 'user', content: 'Tell me about AI.' }
-        ])
+                               { role: 'system', content: 'You are a helpful assistant for Acme.' },
+                               { role: 'user', content: 'Tell me about AI.' }
+                             ])
       end
 
       it 'does not modify the original prompt messages' do
@@ -202,17 +202,17 @@ RSpec.describe Langfuse::Prompt do
       result = prompt.to_dict
 
       expect(result).to eq({
-        id: 'prompt-1',
-        name: 'test-prompt',
-        version: 1,
-        prompt: 'Hello {{name}}, welcome to {place}!',
-        config: { temperature: 0.7 },
-        labels: ['production'],
-        tags: ['greeting'],
-        type: 'text',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-02T00:00:00Z'
-      })
+                             id: 'prompt-1',
+                             name: 'test-prompt',
+                             version: 1,
+                             prompt: 'Hello {{name}}, welcome to {place}!',
+                             config: { temperature: 0.7 },
+                             labels: ['production'],
+                             tags: ['greeting'],
+                             type: 'text',
+                             created_at: '2024-01-01T00:00:00Z',
+                             updated_at: '2024-01-02T00:00:00Z'
+                           })
     end
   end
 end
@@ -328,9 +328,9 @@ RSpec.describe Langfuse::ChatPromptTemplate do
       result = template.format(role: 'a teacher', topic: 'math')
 
       expect(result).to eq([
-        { role: 'system', content: 'You are a teacher.' },
-        { role: 'user', content: 'Tell me about math.' }
-      ])
+                             { role: 'system', content: 'You are a teacher.' },
+                             { role: 'user', content: 'Tell me about math.' }
+                           ])
     end
 
     it 'does not modify the original messages' do

@@ -59,7 +59,7 @@ module Langfuse
         end
       rescue StandardError => e
         if attempts <= retries
-          sleep_time = 2**(attempts - 1) * 0.1 # Exponential backoff: 0.1s, 0.2s, 0.4s...
+          sleep_time = (2**(attempts - 1)) * 0.1 # Exponential backoff: 0.1s, 0.2s, 0.4s...
           warn "Langfuse prompt fetch failed (#{prompt_name}), retrying in #{sleep_time}s... (attempt #{attempts}/#{retries + 1})" if configuration.debug
           sleep(sleep_time)
           retry
@@ -100,7 +100,7 @@ module Langfuse
     #   Langfuse.flush
     #
     def trace(name = nil, user_id: nil, session_id: nil, input: nil, output: nil,
-              metadata: nil, tags: nil, version: nil, release: nil, **kwargs, &block)
+              metadata: nil, tags: nil, version: nil, release: nil, **kwargs)
       trace = client.trace(
         name: name,
         user_id: user_id,

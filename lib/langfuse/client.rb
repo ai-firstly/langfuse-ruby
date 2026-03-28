@@ -522,7 +522,7 @@ module Langfuse
     def resolve_ingestion_mode(explicit_mode)
       return explicit_mode.to_sym if explicit_mode
 
-      env_mode = ENV['LANGFUSE_INGESTION_MODE']
+      env_mode = ENV.fetch('LANGFUSE_INGESTION_MODE', nil)
       return env_mode.to_sym if env_mode && !env_mode.empty?
 
       Langfuse.configuration.ingestion_mode || :legacy

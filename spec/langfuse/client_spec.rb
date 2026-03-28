@@ -287,7 +287,7 @@ RSpec.describe Langfuse::Client do
           headers: { 'Content-Type' => 'application/json' }
         )
 
-      trace = otel_client.trace(name: 'otel-test')
+      otel_client.trace(name: 'otel-test')
       otel_client.flush
 
       expect(WebMock).to have_requested(:post, 'https://test.langfuse.com/api/public/otel/v1/traces')
@@ -302,7 +302,7 @@ RSpec.describe Langfuse::Client do
           headers: { 'Content-Type' => 'application/json' }
         )
 
-      trace = otel_client.trace(name: 'otel-header-test')
+      otel_client.trace(name: 'otel-header-test')
       otel_client.flush
 
       expect(WebMock).to have_requested(:post, 'https://test.langfuse.com/api/public/otel/v1/traces')
