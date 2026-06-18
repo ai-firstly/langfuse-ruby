@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New example file `examples/simplified_usage.rb` demonstrating the simplified API
 - Comprehensive test coverage for convenience methods (28 new tests)
 
+### Fixed
+- `Client#score` now generates an `id` for `score-create` events when none is supplied
+  (also fixes `Trace#score` / `Generation#score`, which delegate to it). Previously scores
+  were enqueued without an `id`; Langfuse's ingestion API accepts such events (HTTP 201) but
+  the worker never persists them, so user feedback scores silently never appeared. This brings
+  `score` in line with `trace`/`span`/`generation`, which already self-generate ids.
+
 ## [0.1.5] - 2025-12-26
 
 ### Added

@@ -332,6 +332,7 @@ module Langfuse
     # Score/Evaluation operations
     def score(name:, value:, trace_id: nil, observation_id: nil, data_type: nil, comment: nil, **kwargs)
       data = {
+        id: kwargs.delete(:id) || Utils.generate_id,
         name: name,
         value: value,
         data_type: data_type,

@@ -79,6 +79,18 @@ RSpec.describe Langfuse::Client do
         value: 0.8
       )
     end
+
+    it 'generates an id when none is provided' do
+      expect(client).to receive(:enqueue_event).with('score-create', hash_including(:id))
+
+      client.score(trace_id: 'test_trace_id', name: 'test_score', value: 0.8)
+    end
+
+    it 'keeps an explicitly provided id' do
+      expect(client).to receive(:enqueue_event).with('score-create', hash_including(id: 'custom-id'))
+
+      client.score(trace_id: 'test_trace_id', name: 'test_score', value: 0.8, id: 'custom-id')
+    end
   end
 
   describe '#flush' do
