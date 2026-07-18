@@ -201,7 +201,9 @@ RSpec.describe Langfuse::OtelExporter do
   end
 
   describe 'score conversion' do
-    it 'converts score-create to OTEL span' do
+    # Scores are intentionally not part of the OTLP mapping; the client routes
+    # score-create events through the ingestion API instead of the OTel exporter.
+    it 'skips score-create events (handled by ingestion API)' do
       events = [
         {
           id: 'evt-1',
@@ -219,15 +221,7 @@ RSpec.describe Langfuse::OtelExporter do
       ]
 
       payload = capture_payload(events)
-      span = payload[:resourceSpans][0][:scopeSpans][0][:spans][0]
-
-      expect(span[:name]).to eq('score-accuracy')
-
-      attrs = attrs_to_hash(span[:attributes])
-      expect(attrs['langfuse.score.name']).to eq('accuracy')
-      expect(attrs['langfuse.score.value']).to eq(0.95)
-      expect(attrs['langfuse.score.comment']).to eq('Great result')
-      expect(attrs['langfuse.observation.type']).to eq('score')
+      expect(payload[:resourceSpans]).to eq([])
     end
 
     it 'skips score without traceId' do
@@ -245,22 +239,29 @@ RSpec.describe Langfuse::OtelExporter do
     end
   end
 
-  describe 'ID conversion' do
-    it 'converts UUID to 32-char trace ID' do
-      trace_id = exporter.send(:to_otel_trace_id, 'a1b2c3d4-e5f6-7890-abcd-ef1234567890')
+  describe 'class-method ID conversion' do
+    it 'converts UUID to 32-char trace ID via class method' do
+      trace_id = described_class.to_otel_trace_id('a1b2c3d4-e5f6-7890-abcd-ef1234567890')
       expect(trace_id).to eq('a1b2c3d4e5f67890abcdef1234567890')
       expect(trace_id.length).to eq(32)
     end
 
-    it 'converts UUID to 16-char span ID' do
-      span_id = exporter.send(:to_otel_span_id, 'a1b2c3d4-e5f6-7890-abcd-ef1234567890')
+    it 'converts UUID to 16-char span ID via class method' do
+      span_id = described_class.to_otel_span_id('a1b2c3d4-e5f6-7890-abcd-ef1234567890')
       expect(span_id).to eq('a1b2c3d4e5f67890')
       expect(span_id.length).to eq(16)
     end
 
+    it 'passes native hex IDs through unchanged' do
+      hex32 = 'a1b2c3d4e5f67890abcdef1234567890'
+      hex16 = 'a1b2c3d4e5f67890'
+      expect(described_class.to_otel_trace_id(hex32)).to eq(hex32)
+      expect(described_class.to_otel_span_id(hex16)).to eq(hex16)
+    end
+
     it 'handles nil IDs' do
-      expect(exporter.send(:to_otel_trace_id, nil)).to eq('0' * 32)
-      expect(exporter.send(:to_otel_span_id, nil)).to eq('0' * 16)
+      expect(described_class.to_otel_trace_id(nil)).to eq('0' * 32)
+      expect(described_class.to_otel_span_id(nil)).to eq('0' * 16)
     end
   end
 

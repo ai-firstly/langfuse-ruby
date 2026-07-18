@@ -250,6 +250,7 @@ module Langfuse
 
     def score(name:, value:, data_type: nil, comment: nil, **kwargs)
       @client.score(
+        trace_id: @trace_id,
         observation_id: @id,
         name: name,
         value: value,

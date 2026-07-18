@@ -1,0 +1,8 @@
+# mise project toolchain config
+# https://mise.jdx.dev/configuration.html
+#
+# This project defaults to the latest stable Ruby release.
+# Run `mise install` after cloning to install it, then `bundle install`.
+
+[tools]
+ruby = "latest"

@@ -16,6 +16,8 @@ require_relative 'langfuse/otel_exporter'
 
 # Ruby SDK for Langfuse - Open source LLM engineering platform
 module Langfuse
+  CLIENT_MUTEX = Mutex.new
+
   class << self
     # Configure the Langfuse client with default settings
     def configure
@@ -31,10 +33,10 @@ module Langfuse
       Client.new(**kwargs)
     end
 
-    # Get a thread-safe singleton client instance
+    # Get a process-wide, thread-safe singleton client instance
     # @return [Client] Langfuse client
     def client
-      Thread.current[:langfuse_client] ||= Client.new
+      @client || CLIENT_MUTEX.synchronize { @client ||= Client.new }
     end
 
     # Get a prompt and optionally compile it with variables
@@ -152,14 +154,14 @@ module Langfuse
 
     # Reset the singleton client (mainly for testing)
     def reset!
-      Thread.current[:langfuse_client] = nil
+      CLIENT_MUTEX.synchronize { @client = nil }
     end
   end
 
   # Configuration class for Langfuse client settings
   class Configuration
     attr_accessor :public_key, :secret_key, :host, :debug, :timeout, :retries, :flush_interval, :auto_flush,
-                  :ingestion_mode
+                  :ingestion_mode, :environment, :sample_rate, :mask, :flush_at, :logger, :shutdown_on_exit
 
     def initialize
       @public_key = nil
@@ -171,6 +173,12 @@ module Langfuse
       @flush_interval = 5
       @auto_flush = true
       @ingestion_mode = :legacy # :legacy or :otel
+      @environment = nil       # default tracing environment for all events
+      @sample_rate = nil       # 0.0..1.0, nil disables sampling
+      @mask = nil              # callable applied to input/output/metadata before sending
+      @flush_at = 15           # flush as soon as this many events are queued
+      @logger = nil            # custom Logger instance
+      @shutdown_on_exit = true # register an at_exit hook that flushes pending events
     end
   end
 end

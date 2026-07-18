@@ -43,6 +43,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Dependencies
+  spec.add_dependency 'base64', '>= 0.1.0' # stdlib in Ruby < 4.0, bundled gem since Ruby 4.0
   spec.add_dependency 'concurrent-ruby', '~> 1.0'
   spec.add_dependency 'faraday', '>= 1.8', '< 3.0'
   spec.add_dependency 'faraday-multipart', '~> 1.0'
@@ -54,6 +55,7 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency 'rake', '~> 13.0'
   spec.add_development_dependency 'rspec', '~> 3.0'
   spec.add_development_dependency 'rubocop', '~> 1.0'
+  spec.add_development_dependency 'tsort', '>= 0.1.0' # stdlib in Ruby < 4.0, default gem since Ruby 4.0
   spec.add_development_dependency 'vcr', '~> 6.0'
   spec.add_development_dependency 'webmock', '~> 3.0'
   spec.add_development_dependency 'yard', '~> 0.9'

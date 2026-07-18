@@ -3,12 +3,14 @@
 module Langfuse
   class Generation
     attr_reader :id, :trace_id, :name, :start_time, :end_time, :completion_start_time,
-                :model, :model_parameters, :input, :output, :usage, :metadata, :level,
+                :model, :model_parameters, :input, :output, :usage, :usage_details, :cost_details,
+                :prompt_name, :prompt_version, :metadata, :level,
                 :status_message, :parent_observation_id, :version, :as_type, :client
 
     def initialize(client:, trace_id:, id: nil, name: nil, start_time: nil, end_time: nil,
                    completion_start_time: nil, model: nil, model_parameters: nil, input: nil,
-                   output: nil, usage: nil, metadata: nil, level: nil, status_message: nil,
+                   output: nil, usage: nil, usage_details: nil, cost_details: nil, prompt: nil,
+                   metadata: nil, level: nil, status_message: nil,
                    parent_observation_id: nil, version: nil, as_type: nil, **kwargs)
       @client = client
       @id = id || Utils.generate_id
@@ -22,6 +24,9 @@ module Langfuse
       @input = input
       @output = output
       @usage = usage || {}
+      @usage_details = usage_details || {}
+      @cost_details = cost_details || {}
+      @prompt_name, @prompt_version = extract_prompt_info(prompt)
       @metadata = metadata || {}
       @level = level
       @status_message = status_message
@@ -35,7 +40,8 @@ module Langfuse
     end
 
     def update(name: nil, end_time: nil, completion_start_time: nil, model: nil,
-               model_parameters: nil, input: nil, output: nil, usage: nil, metadata: nil,
+               model_parameters: nil, input: nil, output: nil, usage: nil,
+               usage_details: nil, cost_details: nil, prompt: nil, metadata: nil,
                level: nil, status_message: nil, version: nil, **kwargs)
       @name = name if name
       @end_time = end_time if end_time
@@ -45,6 +51,9 @@ module Langfuse
       @input = input if input
       @output = output if output
       @usage.merge!(usage) if usage
+      @usage_details.merge!(usage_details) if usage_details
+      @cost_details.merge!(cost_details) if cost_details
+      @prompt_name, @prompt_version = extract_prompt_info(prompt) if prompt
       @metadata.merge!(metadata) if metadata
       @level = level if level
       @status_message = status_message if status_message
@@ -55,10 +64,12 @@ module Langfuse
       self
     end
 
-    def end(output: nil, end_time: nil, usage: nil, **kwargs)
+    def end(output: nil, end_time: nil, usage: nil, usage_details: nil, cost_details: nil, **kwargs)
       @end_time = end_time || Utils.current_timestamp
       @output = output if output
       @usage.merge!(usage) if usage
+      @usage_details.merge!(usage_details) if usage_details
+      @cost_details.merge!(cost_details) if cost_details
       @kwargs.merge!(kwargs)
 
       update_generation
@@ -261,6 +272,7 @@ module Langfuse
 
     def score(name:, value:, data_type: nil, comment: nil, **kwargs)
       @client.score(
+        trace_id: @trace_id,
         observation_id: @id,
         name: name,
         value: value,
@@ -293,11 +305,31 @@ module Langfuse
         parent_observation_id: @parent_observation_id,
         version: @version
       }
+      data[:usage_details] = @usage_details unless @usage_details.nil? || @usage_details.empty?
+      data[:cost_details] = @cost_details unless @cost_details.nil? || @cost_details.empty?
+      data[:prompt_name] = @prompt_name if @prompt_name
+      data[:prompt_version] = @prompt_version if @prompt_version
       data[:type] = @as_type if @as_type
       data.merge(@kwargs).compact
     end
 
     private
+
+    # Accepts a Langfuse::Prompt, a Hash with :name/:version, or nil.
+    # Returns [prompt_name, prompt_version] used to link the generation to a prompt version.
+    def extract_prompt_info(prompt)
+      return [nil, nil] if prompt.nil?
+
+      if prompt.respond_to?(:name) && prompt.respond_to?(:version)
+        [prompt.name, prompt.version]
+      elsif prompt.is_a?(Hash)
+        name = prompt[:name] || prompt['name']
+        version = prompt[:version] || prompt['version']
+        [name, version]
+      else
+        [nil, nil]
+      end
+    end
 
     def validate_as_type(type)
       return nil if type.nil?
