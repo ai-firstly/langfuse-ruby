@@ -16,9 +16,9 @@ Ruby SDK for [Langfuse](https://langfuse.com) - the open-source LLM engineering 
 
 ## Installation
 
-This gem requires Ruby >= 3.1. For development, Ruby version is managed with
-[mise](https://mise.jdx.dev) (defaults to the latest stable Ruby via
-`.mise.toml`).
+This gem requires Ruby >= 3.1 and is tested against Ruby 3.1–4.0. For
+development, Ruby version is managed with [mise](https://mise.jdx.dev) (defaults
+to the latest stable Ruby via `.mise.toml`).
 
 Add this line to your application's Gemfile:
 

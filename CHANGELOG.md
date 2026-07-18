@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **OTel exporter attributes**: `langfuse.environment`, `langfuse.trace.public`, `langfuse.internal.as_root`, `langfuse.observation.usage_details`, `langfuse.observation.cost_details`, `langfuse.observation.prompt.name`, `langfuse.observation.prompt.version`
 - **Simplified API**: Class-level convenience methods (`Langfuse.trace`, `get_prompt`, `client`, `flush`, `shutdown`, `reset!`) with graceful degradation via null objects
 - **Retry Support**: `get_prompt` supports configurable retries with exponential backoff (default: 2 retries)
+- **Ruby 4.0 support**: CI matrix covers Ruby 3.1–4.0; explicit `base64` / `tsort` dependencies for Ruby 4.0 gem packaging
 
 ### Fixed
 - **OTel mode scores lost**: scores were exported as OTLP spans with `langfuse.score.*` attributes, which the server does not map to Langfuse scores. Scores now always route through the ingestion API (`score-create` batch), with trace/observation IDs normalized to OTel hex IDs so they attach to the correct entities
