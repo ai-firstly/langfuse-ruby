@@ -8,12 +8,6 @@ RSpec::Core::RakeTask.new(:spec)
 
 task default: :spec
 
-# Custom release task
-desc 'Release gem to RubyGems'
-task release_gem: [:build] do
-  sh "gem push langfuse-ruby-#{Langfuse::VERSION}.gem"
-end
-
 # Offline test task
 desc 'Run offline tests'
 task :test_offline do

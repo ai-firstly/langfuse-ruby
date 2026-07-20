@@ -30,9 +30,6 @@ lint-fix: ## Run RuboCop with auto-correct
 build: ## Build the gem
 	bundle exec rake build
 
-release: tag ## Release: tag + build + push to RubyGems
-	bundle exec rake release_gem
-
 clean: ## Remove built gem files
 	rm -f langfuse-ruby-*.gem
 	rm -rf pkg/
@@ -40,7 +37,7 @@ clean: ## Remove built gem files
 console: ## Start an IRB console with the gem loaded
 	bundle exec irb -r langfuse
 
-tag: ## Create and push a version tag. Usage: make tag [VERSION=x.y.z]
+tag: ## Create and push a version tag. Usage: make tag VERSION=x.y.z
 	@git fetch --tags; \
 	if [ -z "$(VERSION)" ]; then \
 		LATEST=$$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1); \
