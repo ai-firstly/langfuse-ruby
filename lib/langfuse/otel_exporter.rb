@@ -9,21 +9,45 @@ module Langfuse
   class OtelExporter
     OTEL_ENDPOINT = '/api/public/otel/v1/traces'
 
+    class << self
+      # Convert an ID (UUID or hex string) to an OTEL 32-char hex trace ID.
+      # OTEL trace IDs are 16 bytes (32 hex chars). Native hex IDs pass through unchanged.
+      def to_otel_trace_id(id_str)
+        return '0' * 32 unless id_str
+
+        hex = id_str.to_s.delete('-')
+        hex.ljust(32, '0')[0, 32]
+      end
+
+      # Convert an ID (UUID or hex string) to an OTEL 16-char hex span ID.
+      # OTEL span IDs are 8 bytes (16 hex chars). Native hex IDs pass through unchanged.
+      def to_otel_span_id(id_str)
+        return '0' * 16 unless id_str
+
+        hex = id_str.to_s.delete('-')
+        hex[0, 16]
+      end
+    end
+
     # @param connection [Faraday::Connection] HTTP connection to Langfuse host
     # @param debug [Boolean] whether to print debug output
-    def initialize(connection:, debug: false)
+    # @param logger [Logger, nil] logger for debug output
+    def initialize(connection:, debug: false, logger: nil)
       @connection = connection
       @debug = debug
+      @logger = logger
     end
 
     # Export a batch of Langfuse events as OTLP spans.
+    # Note: score-create events are not part of the OTLP mapping and are
+    # handled separately by the client via the ingestion API.
     # @param events [Array<Hash>] array of event hashes from the event queue
     # @return [Faraday::Response]
     def export(events)
       resource_spans = build_resource_spans(events)
       payload = { resourceSpans: resource_spans }
 
-      puts "OTEL export payload: #{JSON.pretty_generate(payload)}" if @debug
+      log_debug { "OTEL export payload: #{JSON.pretty_generate(payload)}" }
 
       @connection.post(OTEL_ENDPOINT) do |req|
         req.headers['Content-Type'] = 'application/json'
@@ -32,6 +56,16 @@ module Langfuse
     end
 
     private
+
+    def log_debug(&block)
+      return unless @debug
+
+      if @logger
+        @logger.debug(block.call)
+      else
+        puts block.call
+      end
+    end
 
     # Build the top-level resourceSpans array from events.
     # Groups events by trace_id, producing one scopeSpan per trace.
@@ -86,8 +120,6 @@ module Langfuse
         build_observation_span(body, 'generation')
       when 'event-create'
         build_event_span(body)
-      when 'score-create'
-        build_score_span(body)
       end
     end
 
@@ -102,6 +134,9 @@ module Langfuse
       add_attr(attributes, 'langfuse.session.id', body['sessionId'])
       add_attr(attributes, 'langfuse.release', body['release'])
       add_attr(attributes, 'langfuse.version', body['version'])
+      add_attr(attributes, 'langfuse.environment', body['environment'])
+      add_attr(attributes, 'langfuse.trace.public', body['public']) unless body['public'].nil?
+      add_attr(attributes, 'langfuse.internal.as_root', true)
       add_json_attr(attributes, 'langfuse.trace.input', body['input'])
       add_json_attr(attributes, 'langfuse.trace.output', body['output'])
       add_json_attr(attributes, 'langfuse.trace.metadata', body['metadata'])
@@ -186,44 +221,6 @@ module Langfuse
       span
     end
 
-    # Build a minimal OTEL span for a score event.
-    def build_score_span(body)
-      trace_id_raw = body['traceId']
-      return nil unless trace_id_raw
-
-      trace_id = to_otel_trace_id(trace_id_raw)
-      span_id = to_otel_span_id(body['id'] || SecureRandom.uuid)
-      timestamp = to_unix_nano(body['timestamp'] || Time.now.utc.iso8601(3))
-
-      attributes = []
-      add_attr(attributes, 'langfuse.score.name', body['name'])
-      add_attr(attributes, 'langfuse.score.value', body['value'])
-      add_attr(attributes, 'langfuse.score.data_type', body['dataType'])
-      add_attr(attributes, 'langfuse.score.comment', body['comment'])
-      add_attr(attributes, 'langfuse.observation.type', 'score')
-
-      if body['observationId']
-        add_attr(attributes, 'langfuse.score.observation_id', body['observationId'])
-      end
-
-      span = {
-        traceId: trace_id,
-        spanId: span_id,
-        name: "score-#{body['name']}",
-        kind: 1,
-        startTimeUnixNano: timestamp,
-        endTimeUnixNano: timestamp,
-        attributes: attributes,
-        status: { code: 1 }
-      }
-
-      # Parent is either the observation or the trace
-      parent_raw = body['observationId'] || trace_id_raw
-      span[:parentSpanId] = to_otel_span_id(parent_raw) if parent_raw
-
-      span
-    end
-
     # Build OTEL attributes for a span/generation observation.
     def build_observation_attributes(body, obs_type)
       attributes = []
@@ -234,6 +231,7 @@ module Langfuse
       add_json_attr(attributes, 'langfuse.observation.metadata', body['metadata'])
       add_attr(attributes, 'langfuse.observation.level', body['level'])
       add_attr(attributes, 'langfuse.observation.status_message', body['statusMessage'])
+      add_attr(attributes, 'langfuse.environment', body['environment'])
 
       if obs_type == 'generation'
         add_generation_attributes(attributes, body)
@@ -261,25 +259,19 @@ module Langfuse
         add_attr(attributes, 'gen_ai.usage.total_tokens', total) if total
       end
 
+      add_json_attr(attributes, 'langfuse.observation.usage_details', body['usageDetails'])
+      add_json_attr(attributes, 'langfuse.observation.cost_details', body['costDetails'])
+      add_attr(attributes, 'langfuse.observation.prompt.name', body['promptName'])
+      add_attr(attributes, 'langfuse.observation.prompt.version', body['promptVersion'])
       add_attr(attributes, 'langfuse.observation.completion_start_time', body['completionStartTime'])
     end
 
-    # Convert a UUID string to OTEL 32-char hex trace ID.
-    # OTEL trace IDs are 16 bytes (32 hex chars).
-    def to_otel_trace_id(uuid_str)
-      return '0' * 32 unless uuid_str
-
-      hex = uuid_str.to_s.delete('-')
-      hex.ljust(32, '0')[0, 32]
+    def to_otel_trace_id(id_str)
+      self.class.to_otel_trace_id(id_str)
     end
 
-    # Convert a UUID string to OTEL 16-char hex span ID.
-    # OTEL span IDs are 8 bytes (16 hex chars).
-    def to_otel_span_id(uuid_str)
-      return '0' * 16 unless uuid_str
-
-      hex = uuid_str.to_s.delete('-')
-      hex[0, 16]
+    def to_otel_span_id(id_str)
+      self.class.to_otel_span_id(id_str)
     end
 
     # Convert an ISO8601 timestamp string to nanoseconds since epoch.

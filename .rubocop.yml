@@ -63,4 +63,4 @@ Lint/UnusedMethodArgument:
     - 'lib/langfuse/evaluation.rb'
 
 Metrics/ClassLength:
-  Max: 600
+  Max: 800

@@ -29,7 +29,7 @@ RSpec.describe 'Langfuse convenience methods' do
       expect(client1).to eq(client2)
     end
 
-    it 'returns different clients in different threads' do
+    it 'returns the same process-wide client across threads' do
       client1 = Langfuse.client
       client2 = nil
 
@@ -42,7 +42,7 @@ RSpec.describe 'Langfuse convenience methods' do
       end
       thread.join
 
-      expect(client1).not_to eq(client2)
+      expect(client1).to eq(client2)
     end
   end
 

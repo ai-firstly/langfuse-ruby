@@ -3,11 +3,11 @@
 module Langfuse
   class Trace
     attr_reader :id, :name, :user_id, :session_id, :version, :release, :input, :output,
-                :metadata, :tags, :timestamp, :client
+                :metadata, :tags, :timestamp, :public, :client
 
     def initialize(client:, id:, name: nil, user_id: nil, session_id: nil, version: nil,
                    release: nil, input: nil, output: nil, metadata: nil, tags: nil,
-                   timestamp: nil, **kwargs)
+                   timestamp: nil, public: nil, **kwargs)
       @client = client
       @id = id
       @name = name
@@ -20,6 +20,7 @@ module Langfuse
       @metadata = metadata || {}
       @tags = tags || []
       @timestamp = timestamp
+      @public = public
       @kwargs = kwargs
 
       # Create the trace
@@ -50,6 +51,7 @@ module Langfuse
     # Create a child generation
     def generation(name: nil, start_time: nil, end_time: nil, completion_start_time: nil,
                    model: nil, model_parameters: nil, input: nil, output: nil, usage: nil,
+                   usage_details: nil, cost_details: nil, prompt: nil,
                    metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
                    version: nil, **kwargs)
       @client.generation(
@@ -63,6 +65,9 @@ module Langfuse
         input: input,
         output: output,
         usage: usage,
+        usage_details: usage_details,
+        cost_details: cost_details,
+        prompt: prompt,
         metadata: metadata,
         level: level,
         status_message: status_message,
@@ -247,7 +252,8 @@ module Langfuse
     end
 
     def update(name: nil, user_id: nil, session_id: nil, version: nil,
-               release: nil, input: nil, output: nil, metadata: nil, tags: nil, **kwargs)
+               release: nil, input: nil, output: nil, metadata: nil, tags: nil,
+               public: nil, **kwargs)
       # 更新实例变量
       @name = name if name
       @user_id = user_id if user_id
@@ -258,6 +264,7 @@ module Langfuse
       @output = output if output
       @metadata = metadata if metadata
       @tags = tags if tags
+      @public = public unless public.nil?
       @kwargs.merge!(kwargs) if kwargs.any?
       # 触发 trace-update 事件
       update_trace
@@ -279,7 +286,8 @@ module Langfuse
         output: @output,
         metadata: @metadata,
         tags: @tags,
-        timestamp: @timestamp
+        timestamp: @timestamp,
+        public: @public
       }.merge(@kwargs).compact
     end
 
@@ -297,7 +305,8 @@ module Langfuse
         output: @output,
         metadata: @metadata,
         tags: @tags,
-        timestamp: @timestamp
+        timestamp: @timestamp,
+        public: @public
       }.merge(@kwargs).compact
 
       @client.enqueue_event('trace-create', data)
@@ -315,7 +324,8 @@ module Langfuse
         output: @output,
         metadata: @metadata,
         tags: @tags,
-        timestamp: @timestamp
+        timestamp: @timestamp,
+        public: @public
       }.merge(@kwargs).compact
 
       @client.enqueue_event('trace-update', data)

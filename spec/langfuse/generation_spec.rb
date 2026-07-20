@@ -250,8 +250,9 @@ RSpec.describe Langfuse::Generation do
   describe '#score' do
     let(:generation) { client.generation(trace_id: 'trace-1', name: 'test-gen', model: 'gpt-4') }
 
-    it 'calls client.score with observation_id' do
+    it 'calls client.score with trace_id and observation_id' do
       expect(client).to receive(:score).with(
+        trace_id: 'trace-1',
         observation_id: generation.id,
         name: 'accuracy',
         value: 0.95,

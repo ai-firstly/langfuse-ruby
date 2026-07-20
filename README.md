@@ -16,6 +16,10 @@ Ruby SDK for [Langfuse](https://langfuse.com) - the open-source LLM engineering 
 
 ## Installation
 
+This gem requires Ruby >= 3.1 and is tested against Ruby 3.1–4.0. For
+development, Ruby version is managed with [mise](https://mise.jdx.dev) (defaults
+to the latest stable Ruby via `.mise.toml`).
+
 Add this line to your application's Gemfile:
 
 ```ruby
@@ -32,6 +36,17 @@ Or install it yourself as:
 
 ```bash
 $ gem install langfuse-ruby
+```
+
+### Development setup with mise
+
+```bash
+# Install mise (if not already installed), then trust the project config and
+# install the pinned Ruby version.
+brew install mise                  # macOS; see mise docs for other OSes
+mise install                       # installs Ruby from .mise.toml
+bundle install                     # install gem dependencies
+bundle exec rake spec              # run the test suite
 ```
 
 ## Quick Start
@@ -87,6 +102,22 @@ end
 All existing tracing APIs work unchanged. The SDK maps Langfuse events to
 OpenTelemetry spans with the appropriate `langfuse.*` and `gen_ai.*` attributes.
 No additional dependencies are required.
+
+**Scores in OTel mode:** scores are not part of the OTLP trace mapping. The SDK
+always sends them through the ingestion API (`/api/public/ingestion`) as
+`score-create` events, and normalizes `trace_id` / `observation_id` to W3C hex
+IDs so they attach to the correct OTel-ingested entities. If an OTEL export
+fails mid-batch, both the OTEL events and any scores from that batch are
+re-queued for retry.
+
+```ruby
+# Scores work the same in both modes
+client = Langfuse.new(ingestion_mode: :otel, ...)
+trace = client.trace(name: "chat")
+generation = trace.generation(name: "llm", model: "gpt-4o")
+generation.score(name: "faithfulness", value: 0.9)
+client.flush  # traces/spans → OTLP; scores → ingestion API
+```
 
 ### 2. Basic Tracing
 
@@ -176,16 +207,16 @@ end
 ### Other Class Methods
 
 ```ruby
-# Get the thread-safe singleton client
+# Get the process-wide, thread-safe singleton client
 client = Langfuse.client
 
 # Manual flush (when not using block-based tracing)
 Langfuse.flush
 
-# Shutdown the client
+# Shutdown the client (idempotent; also runs via at_exit when shutdown_on_exit is true)
 Langfuse.shutdown
 
-# Reset the singleton (useful for testing)
+# Reset the singleton (useful for testing; prefer Langfuse.new for isolated clients)
 Langfuse.reset!
 ```
 
@@ -406,6 +437,97 @@ generation.score(
 
 ## Advanced Usage
 
+### Tracing Environment, Sampling and Masking
+
+```ruby
+# Tag all events with a tracing environment (also via LANGFUSE_TRACING_ENVIRONMENT)
+client = Langfuse.new(
+  public_key: "pk-lf-...",
+  secret_key: "sk-lf-...",
+  environment: "production"
+)
+
+# Sample a fraction of traces deterministically (also via LANGFUSE_SAMPLE_RATE)
+# All events of a trace share the same keep/drop decision.
+sampled_client = Langfuse.new(
+  public_key: "pk-lf-...",
+  secret_key: "sk-lf-...",
+  sample_rate: 0.1
+)
+
+# Mask sensitive fields before sending (applied to input/output/metadata)
+masked_client = Langfuse.new(
+  public_key: "pk-lf-...",
+  secret_key: "sk-lf-...",
+  mask: ->(value) { value.to_s.gsub(/\b\d{16}\b, "***CARD***") }
+)
+```
+
+### Batch flushing
+
+Events are flushed in the background every `flush_interval` seconds, or as soon
+as `flush_at` events are queued (default 15, env `LANGFUSE_FLUSH_AT`). Batches
+are automatically split to respect the 3.5 MB ingestion API limit, and a
+process-wide `at_exit` hook flushes pending events on shutdown.
+
+```ruby
+client = Langfuse.new(
+  public_key: "pk-lf-...",
+  secret_key: "sk-lf-...",
+  flush_at: 50,           # flush after 50 events
+  flush_interval: 10,     # or every 10 seconds
+  shutdown_on_exit: true  # flush on process exit (default)
+)
+```
+
+### Scores with full fields
+
+Scores can target a trace, an observation, a session, or a dataset run, and
+carry metadata, a config reference, and an annotation queue link:
+
+```ruby
+# Trace-level score
+trace.score(name: "accuracy", value: 0.9, comment: "good")
+
+# Observation-level score (trace_id is set automatically on Span/Generation)
+generation.score(name: "faithfulness", value: 0.8, data_type: "NUMERIC")
+
+# Session-level score
+client.score(name: "csat", value: 5, session_id: "sess-1", data_type: "NUMERIC")
+
+# Dataset-run score with metadata and config link
+client.score(
+  name: "hallucination",
+  value: 0.2,
+  dataset_run_id: "run-1",
+  trace_id: "trace-1",
+  metadata: { evaluator: "llm-judge" },
+  config_id: "cfg-abc",
+  data_type: "NUMERIC"
+)
+
+# Categorical string value
+client.score(name: "label", value: "good", trace_id: "t1", data_type: "CATEGORICAL")
+```
+
+### Generation usage details, cost details and prompt linking
+
+```ruby
+# New v4 usage model (arbitrary keys, e.g. cache tokens)
+gen = trace.generation(
+  name: "chat",
+  model: "gpt-4o",
+  usage_details: { input: 100, output: 50, cache_read: 30 },
+  cost_details: { input: 0.001, output: 0.003, total: 0.004 }
+)
+gen.end(output: "response")
+
+# Link a generation to a prompt version (accepts a Langfuse::Prompt or a hash)
+prompt = Langfuse.get_prompt("chat-prompt")
+gen = trace.generation(name: "chat", model: "gpt-4o", prompt: prompt)
+# or: prompt: { name: "chat-prompt", version: 3 }
+```
+
 ### Error Handling
 
 ```ruby
@@ -435,11 +557,16 @@ client = Langfuse.new(
   public_key: "pk-lf-...",
   secret_key: "sk-lf-...",
   host: "https://your-instance.langfuse.com",
-  debug: true,        # Enable debug logging
-  timeout: 30,        # Request timeout in seconds
-  retries: 3,         # Number of retry attempts
-  flush_interval: 30, # Event flush interval in seconds (default: 5)
-  auto_flush: true    # Enable automatic flushing (default: true)
+  debug: true,          # Enable debug logging (or LANGFUSE_DEBUG=true)
+  timeout: 30,          # Request timeout in seconds
+  retries: 3,           # Number of retry attempts
+  flush_interval: 30,   # Event flush interval in seconds (default: 5)
+  flush_at: 50,         # Flush once this many events are queued (default: 15)
+  auto_flush: true,     # Enable automatic flushing (default: true)
+  environment: "prod",  # Tracing environment (or LANGFUSE_TRACING_ENVIRONMENT)
+  sample_rate: 0.5,     # Keep 50% of traces deterministically (or LANGFUSE_SAMPLE_RATE)
+  mask: ->(v) { v },    # Callable applied to input/output/metadata
+  shutdown_on_exit: true # Flush pending events on process exit (default: true)
 )
 ```
 
@@ -450,9 +577,14 @@ You can also configure the client using environment variables:
 ```bash
 export LANGFUSE_PUBLIC_KEY="pk-lf-..."
 export LANGFUSE_SECRET_KEY="sk-lf-..."
-export LANGFUSE_HOST="https://cloud.langfuse.com"
+export LANGFUSE_HOST="https://cloud.langfuse.com"   # or LANGFUSE_BASE_URL
 export LANGFUSE_FLUSH_INTERVAL=5
+export LANGFUSE_FLUSH_AT=15
 export LANGFUSE_AUTO_FLUSH=true
+export LANGFUSE_TRACING_ENVIRONMENT="production"
+export LANGFUSE_SAMPLE_RATE=0.5
+export LANGFUSE_DEBUG=false
+export LANGFUSE_INGESTION_MODE=legacy   # or otel
 ```
 
 ### Automatic Flush Control
