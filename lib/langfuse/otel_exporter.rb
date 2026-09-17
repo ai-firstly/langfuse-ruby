@@ -366,7 +366,7 @@ module Langfuse
       return '0' unless timestamp_str
 
       time = Time.parse(timestamp_str.to_s)
-      (time.to_i * 1_000_000_000 + time.nsec).to_s
+      ((time.to_i * 1_000_000_000) + time.nsec).to_s
     rescue ArgumentError
       '0'
     end

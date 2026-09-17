@@ -80,7 +80,7 @@ RSpec.describe 'OTel v4 ingestion path' do
 
     it 're-queues the not-yet-sent chunks when a chunk fails' do
       stub_const('Langfuse::Client::MAX_BATCH_SIZE_BYTES', 300)
-      stub_request(:post, otel_endpoint).to_return(status: 500, body: 'boom', headers: json_headers)
+      stub_request(:post, otel_endpoint).to_return(status: 500, body: { error: 'boom' }.to_json, headers: json_headers)
 
       otel_client.trace(name: 'first')
       otel_client.trace(name: 'second')
@@ -135,7 +135,7 @@ RSpec.describe 'OTel v4 ingestion path' do
 
     it 'retries transient 5xx responses and succeeds on subsequent attempt' do
       stub_request(:post, otel_endpoint).to_return(
-        { status: 500, body: 'temporary error', headers: json_headers },
+        { status: 500, body: { error: 'temporary error' }.to_json, headers: json_headers },
         { status: 200, body: '{}', headers: json_headers }
       )
 

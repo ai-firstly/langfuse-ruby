@@ -261,7 +261,7 @@ RSpec.describe 'Langfuse Phase 0 features' do
         auto_flush: false, logger: logger
       )
 
-      log_client.enqueue_event('trace-create', id: 't', name: 't')
+      log_client.enqueue_event('trace-create', { id: 't', name: 't' })
       log_client.flush
 
       expect(logger).to have_received(:warn).with(/partial failure.*evt-1.*bad body/)
