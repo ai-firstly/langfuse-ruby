@@ -8,6 +8,7 @@ require 'base64'
 require 'concurrent'
 require 'logger'
 require 'digest'
+require 'time'
 
 module Langfuse
   class Client
@@ -17,6 +18,21 @@ module Langfuse
     # Allowed format for the tracing environment field
     ENVIRONMENT_PATTERN = /\A(?!langfuse)[a-z0-9\-_]{1,40}\z/
 
+    # How long shutdown waits for the flush thread to finish its current send
+    FLUSH_THREAD_JOIN_TIMEOUT = 5
+
+    # Dropped-event warnings are emitted on the first drop and then every N drops
+    DROPPED_EVENTS_WARN_INTERVAL = 100
+
+    # Supported ingestion transports: the legacy ingestion API and OTLP (Langfuse v4)
+    INGESTION_MODES = %i[legacy otel].freeze
+
+    # Backoff for transient request failures. The delay is jittered so that many
+    # clients hitting the same rate limit do not retry in lockstep, and capped so
+    # a server-sent Retry-After cannot stall a flush for minutes.
+    RETRY_BASE_DELAY_SECONDS = 0.5
+    MAX_RETRY_DELAY_SECONDS = 10
+
     # Log device that resolves $stdout at write time so output redirection
     # (e.g. in tests) keeps working after the logger was created.
     class StdoutLogDevice
@@ -25,14 +41,21 @@ module Langfuse
       end
 
       def close; end
+
+      def flush
+        $stdout.flush
+      end
     end
 
     attr_reader :public_key, :secret_key, :host, :debug, :timeout, :retries, :flush_interval, :auto_flush,
-                :ingestion_mode, :environment, :sample_rate, :flush_at, :mask, :logger
+                :ingestion_mode, :environment, :sample_rate, :flush_at, :max_queue_size, :mask, :logger
 
-    def initialize(public_key: nil, secret_key: nil, host: nil, debug: false, timeout: 30, retries: 3,
+    # timeout/retries default to nil so that Langfuse.configure values are not
+    # shadowed by the method defaults; the fallbacks live in config_value.
+    def initialize(public_key: nil, secret_key: nil, host: nil, debug: false, timeout: nil, retries: nil,
                    flush_interval: nil, auto_flush: nil, ingestion_mode: nil, environment: nil,
-                   sample_rate: nil, mask: nil, flush_at: nil, logger: nil, shutdown_on_exit: nil)
+                   sample_rate: nil, mask: nil, flush_at: nil, max_queue_size: nil, logger: nil,
+                   shutdown_on_exit: nil, http_adapter: nil)
       @public_key = config_value(public_key, 'LANGFUSE_PUBLIC_KEY', :public_key)
       @secret_key = config_value(secret_key, 'LANGFUSE_SECRET_KEY', :secret_key)
       @host = host || ENV['LANGFUSE_HOST'] || ENV['LANGFUSE_BASE_URL'] || Langfuse.configuration.host
@@ -41,26 +64,35 @@ module Langfuse
       @retries = config_value(retries, nil, :retries) { 3 }
       @flush_interval = config_value(flush_interval, 'LANGFUSE_FLUSH_INTERVAL', :flush_interval) { 5 }
       @flush_at = config_value(flush_at, 'LANGFUSE_FLUSH_AT', :flush_at) { 15 }
+      @max_queue_size = config_value(max_queue_size, 'LANGFUSE_MAX_QUEUE_SIZE', :max_queue_size) { 10_000 }
       @auto_flush = resolve_auto_flush(auto_flush)
-      @ingestion_mode = resolve_ingestion_mode(ingestion_mode)
       @logger = logger || Langfuse.configuration.logger || build_default_logger
+      @ingestion_mode = resolve_ingestion_mode(ingestion_mode)
       @environment = resolve_environment(environment)
       @sample_rate = resolve_sample_rate(sample_rate)
       @mask = resolve_mask(mask)
       @shutdown_on_exit = shutdown_on_exit.nil? ? Langfuse.configuration.shutdown_on_exit : shutdown_on_exit
+      @http_adapter = http_adapter || Langfuse.configuration.http_adapter
       @shutdown = false
 
       raise AuthenticationError, 'Public key is required' unless @public_key
       raise AuthenticationError, 'Secret key is required' unless @secret_key
 
-      @connection = build_connection
-      @otel_connection = build_otel_connection if @ingestion_mode == :otel
-      @otel_exporter = OtelExporter.new(connection: @otel_connection, debug: @debug, logger: @logger) if @ingestion_mode == :otel
+      setup_transport
       @event_queue = Concurrent::Array.new
+      @queue_mutex = Mutex.new
       @flush_mutex = Mutex.new
       @flush_condition = ConditionVariable.new
-      @flush_thread = start_flush_thread if @auto_flush
+      @dropped_events = 0
+      @prompt_cache = PromptCache.new
+      start_flush_thread if @auto_flush
       register_shutdown_hook if @shutdown_on_exit
+    end
+
+    # Keep the secret key out of logs, console output and exception messages.
+    def inspect
+      "#<#{self.class.name} host=#{@host.inspect} public_key=#{@public_key.inspect} " \
+        "ingestion_mode=#{@ingestion_mode.inspect}>"
     end
 
     # Generate a trace ID matching the active ingestion mode
@@ -118,91 +150,15 @@ module Langfuse
       )
     end
 
-    # Convenience methods for enhanced observation types
+    # Convenience methods for enhanced observation types: each is a span with a
+    # fixed as_type. (embedding keeps its own definition because it folds
+    # model/usage into metadata first.)
+    extend SpanWrappers
+    define_span_wrappers(evaluator_name: :evaluator_obs)
 
-    # Create an agent observation (wrapper around span with as_type: 'agent')
-    def agent(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-              metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-              version: nil, **kwargs)
-      span(
-        trace_id: trace_id,
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::AGENT,
-        **kwargs
-      )
-    end
-
-    # Create a tool observation (wrapper around span with as_type: 'tool')
-    def tool(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-             metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-             version: nil, **kwargs)
-      span(
-        trace_id: trace_id,
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::TOOL,
-        **kwargs
-      )
-    end
-
-    # Create a chain observation (wrapper around span with as_type: 'chain')
-    def chain(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-              metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-              version: nil, **kwargs)
-      span(
-        trace_id: trace_id,
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::CHAIN,
-        **kwargs
-      )
-    end
-
-    # Create a retriever observation (wrapper around span with as_type: 'retriever')
-    def retriever(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-                  metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-                  version: nil, **kwargs)
-      span(
-        trace_id: trace_id,
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::RETRIEVER,
-        **kwargs
-      )
-    end
+    # `evaluator` matches Trace/Span/Generation; `evaluator_obs` is kept for
+    # callers that adopted the older name.
+    alias evaluator evaluator_obs
 
     # Create an embedding observation (wrapper around span with as_type: 'embedding')
     def embedding(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
@@ -224,48 +180,6 @@ module Langfuse
         parent_observation_id: parent_observation_id,
         version: version,
         as_type: ObservationType::EMBEDDING,
-        **kwargs
-      )
-    end
-
-    # Create an evaluator observation (wrapper around span with as_type: 'evaluator')
-    def evaluator_obs(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-                      metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-                      version: nil, **kwargs)
-      span(
-        trace_id: trace_id,
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::EVALUATOR,
-        **kwargs
-      )
-    end
-
-    # Create a guardrail observation (wrapper around span with as_type: 'guardrail')
-    def guardrail(trace_id:, name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-                  metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-                  version: nil, **kwargs)
-      span(
-        trace_id: trace_id,
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::GUARDRAIL,
         **kwargs
       )
     end
@@ -322,42 +236,24 @@ module Langfuse
     end
 
     # Prompt operations
-    def get_prompt(name, version: nil, label: nil, cache_ttl_seconds: 60)
+    def get_prompt(name, version: nil, label: nil, cache_ttl_seconds: 60, retries: nil)
       cache_key = "prompt:#{name}:#{version}:#{label}"
+      cached = @prompt_cache.read(cache_key, cache_ttl_seconds)
+      return cached if cached
 
-      if (cached_prompt = @prompt_cache&.dig(cache_key)) && (Time.now - cached_prompt[:cached_at] < cache_ttl_seconds)
-        return cached_prompt[:prompt]
+      begin
+        prompt = request_prompt(name, version: version, label: label, retries: retries)
+      rescue StandardError => e
+        # An expired entry beats no prompt at all: serving it keeps the
+        # application running through a Langfuse outage.
+        stale = @prompt_cache.read_stale(cache_key)
+        raise unless stale
+
+        @logger.warn("Langfuse prompt fetch failed (#{name}), serving the cached copy: #{e.message}")
+        return stale
       end
 
-      encoded_name = Utils.url_encode(name)
-      path = "/api/public/v2/prompts/#{encoded_name}"
-      params = {}
-      params[:version] = version if version
-      params[:label] = label if label
-
-      @logger.debug("Making request to: #{@host}#{path} with params: #{params}")
-
-      response = get(path, params)
-
-      @logger.debug("Response status: #{response.status}")
-      @logger.debug("Response headers: #{response.headers}")
-      @logger.debug("Response body type: #{response.body.class}")
-
-      # Check if response body is a string (HTML) instead of parsed JSON
-      if response.body.is_a?(String) && response.body.include?('<!DOCTYPE html>')
-        @logger.debug('Received HTML response instead of JSON:')
-        @logger.debug(response.body[0..200])
-        raise APIError,
-              'Received HTML response instead of JSON. This usually indicates a 404 error or incorrect API endpoint.'
-      end
-
-      prompt = Prompt.new(response.body)
-
-      # Cache the prompt
-      @prompt_cache ||= {}
-      @prompt_cache[cache_key] = { prompt: prompt, cached_at: Time.now }
-
-      prompt
+      @prompt_cache.write(cache_key, prompt)
     end
 
     def create_prompt(name:, prompt:, labels: [], config: {}, **kwargs)
@@ -405,7 +301,7 @@ module Langfuse
     alias create_score score
 
     # Event queue management
-    def enqueue_event(type, body)
+    def enqueue_event(type, body, trace_ref: nil)
       # 验证事件类型是否有效
       valid_types = %w[
         trace-create trace-update
@@ -416,13 +312,15 @@ module Langfuse
       ]
 
       unless valid_types.include?(type)
-        @logger.debug("Warning: Invalid event type '#{type}'. Skipping event.")
+        @logger.debug { "Warning: Invalid event type '#{type}'. Skipping event." }
         return
       end
 
-      prepared_body = Utils.prepare_event_body(body)
-      inject_default_environment(prepared_body)
-      apply_mask(prepared_body)
+      # Runs before the event is queued so events inherited from a parent process
+      # are discarded without dropping the event we are about to enqueue.
+      ensure_flush_thread
+
+      prepared_body = prepare_queued_body(body)
 
       return unless sampled_event?(type, prepared_body)
 
@@ -432,42 +330,28 @@ module Langfuse
         timestamp: Utils.current_timestamp,
         body: prepared_body
       }
+      event[:trace_ref] = trace_ref if trace_ref
 
-      if type == 'trace-update'
-        # 查找对应的 trace-create 事件并更新
-        trace_id = body['id'] || body[:id]
-        if trace_id
-          existing_event_index = @event_queue.find_index do |existing_event|
-            existing_event[:type] == 'trace-create' &&
-              (existing_event[:body]['id'] == trace_id || existing_event[:body][:id] == trace_id)
-          end
-
-          if existing_event_index
-            # 更新现有的 trace-create 事件
-            @event_queue[existing_event_index][:body].merge!(event[:body])
-            @event_queue[existing_event_index][:timestamp] = event[:timestamp]
-            @logger.debug("Updated existing trace-create event for trace_id: #{trace_id}")
-          else
-            # 如果没找到对应的 trace-create 事件，将 trace-update 转换为 trace-create
-            event[:type] = 'trace-create'
-            @event_queue << event
-            @logger.debug("Converted trace-update to trace-create for trace_id: #{trace_id}")
-          end
+      # The queue is drained under the same lock, so a concurrent flush can no
+      # longer take an event out between finding it and merging into it.
+      queued = @queue_mutex.synchronize do
+        if type == 'trace-update'
+          merge_or_queue_trace_update?(event)
         else
-          @logger.debug('Warning: trace-update event missing trace_id, skipping')
+          push_event?(event)
         end
-      else
-        @event_queue << event
       end
-      @logger.debug("Enqueued event: #{type}")
+      return unless queued
+
+      @logger.debug { "Enqueued event: #{type}" }
 
       request_flush if @auto_flush && @event_queue.length >= @flush_at
     end
 
     def flush
-      return if @event_queue.empty?
-
-      events = @event_queue.shift(@event_queue.length)
+      events = @queue_mutex.synchronize do
+        @event_queue.empty? ? [] : @event_queue.shift(@event_queue.length)
+      end
       return if events.empty?
 
       send_batch(events)
@@ -477,11 +361,41 @@ module Langfuse
       return if @shutdown
 
       @shutdown = true
-      @flush_thread&.kill if @auto_flush
+      stop_flush_thread
       flush unless @event_queue.empty?
     end
 
     private
+
+    def setup_transport
+      @connection = build_connection
+      return unless @ingestion_mode == :otel
+
+      @otel_connection = build_otel_connection
+      @otel_exporter = OtelExporter.new(connection: @otel_connection, debug: @debug, logger: @logger)
+    end
+
+    def request_prompt(name, version:, label:, retries: nil)
+      path = "/api/public/v2/prompts/#{Utils.url_encode(name)}"
+      params = {}
+      params[:version] = version if version
+      params[:label] = label if label
+
+      @logger.debug { "Making request to: #{@host}#{path} with params: #{params}" }
+
+      response = request(:get, path, params: params, retries: retries)
+
+      @logger.debug { "Response status: #{response.status}, body type: #{response.body.class}" }
+
+      # Check if response body is a string (HTML) instead of parsed JSON
+      if response.body.is_a?(String) && response.body.include?('<!DOCTYPE html>')
+        @logger.debug { "Received HTML response instead of JSON: #{response.body[0..200]}" }
+        raise APIError,
+              'Received HTML response instead of JSON. This usually indicates a 404 error or incorrect API endpoint.'
+      end
+
+      Prompt.new(response.body)
+    end
 
     def build_default_logger
       logger = Logger.new(StdoutLogDevice.new)
@@ -499,7 +413,10 @@ module Langfuse
 
       if env_key
         env_val = ENV.fetch(env_key, nil)
-        return env_val.to_i if env_val && %i[flush_interval flush_at timeout retries].include?(config_attr)
+        if env_val && %i[flush_interval flush_at timeout retries max_queue_size].include?(config_attr)
+          return env_val.to_i
+        end
+
         return env_val if env_val
       end
 
@@ -557,6 +474,16 @@ module Langfuse
       end
     end
 
+    # Camelize top-level keys, inject the default environment, then apply the
+    # mask. Every body that enters the queue — including a trace_ref rebuilt
+    # after the matching create has already flushed — must go through this.
+    def prepare_queued_body(body)
+      prepared = Utils.prepare_event_body(body)
+      inject_default_environment(prepared)
+      apply_mask(prepared)
+      prepared
+    end
+
     def inject_default_environment(body)
       return unless @environment
       return if body.key?('environment')
@@ -602,6 +529,128 @@ module Langfuse
 
     def request_flush
       @flush_mutex.synchronize { @flush_condition.signal }
+    end
+
+    # Merge a trace-update into the queued trace-create for the same trace.
+    # Returns whether the queue changed. Callers must hold @queue_mutex.
+    def merge_or_queue_trace_update?(event)
+      trace_id = event[:body]['id']
+
+      unless trace_id
+        @logger.debug { 'Warning: trace-update event missing trace_id, skipping' }
+        return false
+      end
+
+      position = @event_queue.find_index do |queued_event|
+        queued_event[:type] == 'trace-create' && queued_event[:body]['id'] == trace_id
+      end
+
+      unless position
+        # Nothing left to merge into (already flushed): send it as a create so
+        # the server can upsert. Use the trace's full state (via :trace_ref) to
+        # avoid sending a partial body that would produce a broken observation.
+        event[:type] = 'trace-create'
+        if event[:trace_ref]
+          # to_dict is the live instance state (symbol keys, unmasked). Re-run
+          # the same prepare/env/mask path as enqueue_event so the API still
+          # sees camelCase keys, the default environment, and redacted PII.
+          event[:body] = prepare_queued_body(event[:trace_ref].to_dict)
+          event.delete(:trace_ref)
+        end
+        @logger.debug { "Converted trace-update to trace-create for trace_id: #{trace_id}" }
+        return push_event?(event)
+      end
+
+      @event_queue[position][:body].merge!(event[:body])
+      @event_queue[position][:timestamp] = event[:timestamp]
+      @logger.debug { "Updated existing trace-create event for trace_id: #{trace_id}" }
+      true
+    end
+
+    # Append an event, evicting the oldest ones when the queue is full. Without a
+    # bound, an unreachable Langfuse would grow the queue until the process dies.
+    # Callers must hold @queue_mutex. Returns whether the event was queued.
+    def push_event?(event)
+      dropped = 0
+      while @event_queue.length >= @max_queue_size
+        @event_queue.shift
+        dropped += 1
+      end
+
+      if dropped.positive?
+        @dropped_events += dropped
+        warn_dropped_events
+      end
+
+      @event_queue << event
+      true
+    end
+
+    def warn_dropped_events
+      return unless @dropped_events == 1 || (@dropped_events % DROPPED_EVENTS_WARN_INTERVAL).zero?
+
+      @logger.warn("Langfuse event queue is full (max_queue_size=#{@max_queue_size}); " \
+                   "dropped #{@dropped_events} oldest events so far")
+    end
+
+    # Put events back for the next flush. Permanent failures are dropped instead:
+    # they would fail again on every flush and block the queue indefinitely.
+    # Events are prepended so they are retried before any newly enqueued events,
+    # preserving the original chronological order.
+    def requeue_events(events, error)
+      return if events.empty?
+
+      if permanent_failure?(error)
+        @logger.warn("Langfuse dropped #{events.length} events after a permanent failure " \
+                     "(#{error.class}): #{error.message}")
+        return
+      end
+
+      @queue_mutex.synchronize { events.reverse_each { |event| prepend_event(event) } }
+    end
+
+    # Insert an event at the head of the queue, evicting the oldest (tail) if full.
+    # Callers must hold @queue_mutex.
+    def prepend_event(event)
+      if @event_queue.length >= @max_queue_size
+        @event_queue.pop
+        @dropped_events += 1
+        warn_dropped_events
+      end
+      @event_queue.unshift(event)
+    end
+
+    def permanent_failure?(error)
+      error.is_a?(ValidationError) || error.is_a?(AuthenticationError)
+    end
+
+    # Threads do not survive fork. Recreate the flush thread in the child and drop
+    # the events it inherited, which the parent process still flushes itself.
+    def ensure_flush_thread
+      return unless @auto_flush
+      return if @flush_thread_pid == Process.pid && @flush_thread&.alive?
+
+      if @flush_thread_pid && @flush_thread_pid != Process.pid
+        inherited = @queue_mutex.synchronize { @event_queue.shift(@event_queue.length) }
+        @logger.debug { "Dropped #{inherited.length} events inherited from pid #{@flush_thread_pid}" }
+      end
+
+      start_flush_thread
+    end
+
+    # Let the flush thread finish the send it is in the middle of; killing it
+    # would lose the events it already drained from the queue.
+    def stop_flush_thread
+      thread = @flush_thread
+      return unless thread
+
+      @stop_flushing = true
+      @flush_thread = nil
+      request_flush
+      return if thread.join(FLUSH_THREAD_JOIN_TIMEOUT)
+
+      @logger.warn("Langfuse flush thread did not stop within #{FLUSH_THREAD_JOIN_TIMEOUT}s; terminating it")
+      thread.kill
     end
 
     def debug_event_data(events)
@@ -655,24 +704,56 @@ module Langfuse
     end
 
     def send_batch_legacy(valid_events)
-      chunks = chunk_events(valid_events)
-      response = nil
+      payload = encode_batch(valid_events)
 
-      chunks.each_with_index do |chunk, index|
-        batch_data = build_batch_data(chunk)
-        @logger.debug("Sending batch data: #{batch_data}")
-
+      # Common case: the whole batch fits, so this single JSON pass covers both
+      # the size check and the request body. Only an oversized payload pays for
+      # the per-event accounting in chunk_events.
+      if payload && payload.bytesize <= MAX_BATCH_SIZE_BYTES
         begin
-          response = post('/api/public/ingestion', batch_data)
-          log_ingestion_errors(response)
-          @logger.debug("Flushed #{chunk.length} events (legacy)")
+          return post_ingestion(payload, valid_events.length)
         rescue StandardError => e
-          @logger.debug("Failed to flush events: #{e.message}")
-          chunks[index..].each { |failed_chunk| failed_chunk.each { |event| @event_queue << event } }
+          @logger.debug { "Failed to flush events: #{e.message}" }
+          requeue_events(valid_events, e)
           raise
         end
       end
 
+      send_batch_legacy_chunked(valid_events)
+    end
+
+    def send_batch_legacy_chunked(valid_events)
+      chunks = chunk_events(valid_events)
+      response = nil
+
+      chunks.each_with_index do |chunk, index|
+        response = post_ingestion(encode_batch(chunk) || build_batch_data(chunk), chunk.length)
+      rescue StandardError => e
+        @logger.debug { "Failed to flush events: #{e.message}" }
+        requeue_events(chunks[index..].flatten(1), e)
+        raise
+      end
+
+      response
+    end
+
+    # Faraday forwards a String body untouched, so a pre-serialized batch is not
+    # encoded a second time by the JSON middleware.
+    def encode_batch(events)
+      JSON.generate(build_batch_data(events))
+    rescue StandardError => e
+      @logger.debug { "Could not pre-serialize the batch, letting Faraday encode it: #{e.message}" }
+      nil
+    end
+
+    def post_ingestion(payload, event_count)
+      # Block form: interpolating a multi-megabyte batch would cost the same
+      # whether or not debug logging is enabled.
+      @logger.debug { "Sending batch data: #{payload}" }
+
+      response = post('/api/public/ingestion', payload)
+      log_ingestion_errors(response)
+      @logger.debug { "Flushed #{event_count} events (legacy)" }
       response
     end
 
@@ -682,18 +763,21 @@ module Langfuse
       response = nil
 
       unless otel_events.empty?
-        @logger.debug("Sending #{otel_events.length} events via OTEL")
+        @logger.debug { "Sending #{otel_events.length} events via OTEL" }
+        chunks = chunk_events(otel_events)
 
-        begin
-          response = @otel_exporter.export(otel_events)
-          handle_response(response)
-          @logger.debug("Flushed #{otel_events.length} events (otel)")
+        chunks.each_with_index do |chunk, index|
+          response = export_otel_chunk(chunk)
         rescue StandardError => e
-          @logger.debug("Failed to flush OTEL events: #{e.message}")
-          # Re-queue both OTEL and score events — scores were already drained
-          # from the queue by flush and would otherwise be permanently lost.
-          otel_events.each { |event| @event_queue << event }
-          score_events.each { |event| @event_queue << event }
+          @logger.debug { "Failed to flush OTEL events: #{e.message}" }
+          # Re-queue the not-yet-sent OTel chunks. Permanent failures (4xx)
+          # are dropped by requeue_events; transient ones are re-queued.
+          requeue_events(chunks[index..].flatten(1), e)
+          # Score events were never attempted and must always be re-queued,
+          # regardless of why the OTel chunk failed.
+          unless score_events.empty?
+            @queue_mutex.synchronize { score_events.each { |ev| prepend_event(ev) } }
+          end
           raise
         end
       end
@@ -706,6 +790,56 @@ module Langfuse
       end
 
       response
+    end
+
+    # Export one chunk of events to the OTLP endpoint with retries for transient errors.
+    def export_otel_chunk(chunk, retries: nil)
+      allowed_retries = retries || @retries
+      attempt = 0
+      response = nil
+
+      begin
+        response = execute_otel_export(chunk)
+        handle_response(response)
+        log_otel_partial_success(response)
+        @logger.debug { "Flushed #{chunk.length} events (otel)" }
+        response
+      rescue Langfuse::Error => e
+        raise unless attempt < allowed_retries && retryable_error?(e, response)
+
+        attempt += 1
+        delay = retry_delay(attempt, response)
+        @logger.debug { "Retrying OTEL export in #{delay.round(2)}s (attempt #{attempt}/#{allowed_retries}): #{e.message}" }
+        response = nil
+        sleep(delay)
+        retry
+      end
+    end
+
+    def execute_otel_export(chunk)
+      @otel_exporter.export(chunk)
+    rescue Faraday::TimeoutError => e
+      raise TimeoutError, "Request timed out: #{e.message}"
+    rescue Faraday::ConnectionFailed => e
+      raise NetworkError, "Connection failed: #{e.message}"
+    rescue Faraday::Error => e
+      raise APIError, "OTEL export failed: #{e.message}"
+    end
+
+    # The OTLP endpoint answers 200 even when it rejected part of the payload.
+    def log_otel_partial_success(response)
+      body = response.respond_to?(:body) ? response.body : nil
+      return unless body.is_a?(Hash)
+
+      partial = body['partialSuccess'] || body[:partialSuccess]
+      return unless partial.is_a?(Hash)
+
+      rejected = (partial['rejectedSpans'] || partial[:rejectedSpans]).to_i
+      message = (partial['errorMessage'] || partial[:errorMessage]).to_s
+      return if rejected.zero? && message.empty?
+
+      details = " - #{message}" unless message.empty?
+      @logger.warn("Langfuse OTEL partial success: #{rejected} spans rejected#{details}")
     end
 
     # Align score references with the OTel-derived trace/span IDs so scores
@@ -777,26 +911,38 @@ module Langfuse
     def start_flush_thread
       return unless @auto_flush
 
-      Thread.new do
-        loop do
+      @stop_flushing = false
+      @flush_thread_pid = Process.pid
+      @flush_thread = Thread.new do
+        until @stop_flushing
           # Wait for the flush interval or an early wake-up (flush_at threshold)
           @flush_mutex.synchronize { @flush_condition.wait(@flush_mutex, @flush_interval) }
+          break if @stop_flushing
+
           begin
             flush unless @event_queue.empty?
           rescue StandardError => e
-            @logger.debug("Error in flush thread: #{e.message}")
+            @logger.debug { "Error in flush thread: #{e.message}" }
           end
         end
       end
     end
 
     def resolve_ingestion_mode(explicit_mode)
-      return explicit_mode.to_sym if explicit_mode
-
       env_mode = ENV.fetch('LANGFUSE_INGESTION_MODE', nil)
-      return env_mode.to_sym if env_mode && !env_mode.empty?
+      env_mode = nil if env_mode&.empty?
+      mode = explicit_mode || env_mode || Langfuse.configuration.ingestion_mode
+      return :legacy if mode.nil?
 
-      Langfuse.configuration.ingestion_mode || :legacy
+      # Unrecognized values used to silently behave like :legacy, so a typo in
+      # LANGFUSE_INGESTION_MODE looked like a working v4 setup.
+      mode = mode.to_s.downcase.to_sym
+      return mode if INGESTION_MODES.include?(mode)
+
+      @logger.warn do
+        "Unknown Langfuse ingestion_mode #{mode.inspect}, expected one of #{INGESTION_MODES.join(', ')}. Using :legacy."
+      end
+      :legacy
     end
 
     def build_connection
@@ -817,9 +963,22 @@ module Langfuse
         # 添加调试日志
         conn.response :logger if @debug
 
-        # 使用默认适配器
-        conn.adapter Faraday.default_adapter
+        apply_http_adapter(conn)
       end
+    end
+
+    # The default net_http adapter opens and closes a connection per request.
+    # `http_adapter` lets an application swap in a keep-alive adapter (for
+    # example `:net_http_persistent`) without this gem depending on it; an
+    # adapter that is not installed falls back instead of breaking tracing.
+    def apply_http_adapter(conn)
+      return conn.adapter(Faraday.default_adapter) if @http_adapter.nil?
+
+      conn.adapter(*Array(@http_adapter))
+    rescue StandardError => e
+      @logger.warn("Langfuse could not use the #{@http_adapter.inspect} Faraday adapter " \
+                   "(#{e.message}); falling back to #{Faraday.default_adapter.inspect}")
+      conn.adapter(Faraday.default_adapter)
     end
 
     # Build a separate Faraday connection for OTEL with the v4 ingestion header.
@@ -834,7 +993,7 @@ module Langfuse
 
         conn.options.timeout = @timeout
         conn.response :logger if @debug
-        conn.adapter Faraday.default_adapter
+        apply_http_adapter(conn)
       end
     end
 
@@ -859,29 +1018,80 @@ module Langfuse
       request(:patch, path, json: data)
     end
 
-    def request(method, path, params: {}, json: nil)
-      retries_left = @retries
+    def request(method, path, params: {}, json: nil, retries: nil)
+      allowed_retries = retries || @retries
+      attempt = 0
+      response = nil
 
       begin
-        response = @connection.send(method) do |req|
-          req.url path
-          req.params = params if params.any?
-          req.body = json if json
-        end
-
+        response = execute_request(method, path, params, json)
         handle_response(response)
-      rescue Faraday::TimeoutError => e
-        raise TimeoutError, "Request timed out: #{e.message}"
-      rescue Faraday::ConnectionFailed => e
-        if retries_left.positive?
-          retries_left -= 1
-          sleep(2**(@retries - retries_left))
-          retry
-        end
-        raise NetworkError, "Connection failed: #{e.message}"
+      rescue Langfuse::Error => e
+        # Typed errors raised by handle_response (401/404/429/4xx/5xx) keep their
+        # class so callers can rescue AuthenticationError/RateLimitError etc.
+        raise unless attempt < allowed_retries && retryable_error?(e, response)
+
+        attempt += 1
+        delay = retry_delay(attempt, response)
+        @logger.debug { "Retrying #{method.upcase} #{path} in #{delay.round(2)}s (attempt #{attempt}/#{allowed_retries}): #{e.message}" }
+        response = nil
+        sleep(delay)
+        retry
       rescue StandardError => e
         raise APIError, "Request failed: #{e.message}"
       end
+    end
+
+    def execute_request(method, path, params, json)
+      @connection.send(method) do |req|
+        req.url path
+        req.params = params if params.any?
+        req.body = json if json
+      end
+    rescue Faraday::TimeoutError => e
+      raise TimeoutError, "Request timed out: #{e.message}"
+    rescue Faraday::ConnectionFailed => e
+      raise NetworkError, "Connection failed: #{e.message}"
+    end
+
+    # Transient failures worth another attempt. Authentication and validation
+    # errors would fail identically on a retry, so they are raised immediately.
+    def retryable_error?(error, response)
+      case error
+      when TimeoutError, NetworkError, RateLimitError
+        true
+      when APIError
+        response.respond_to?(:status) && response.status >= 500
+      else
+        false
+      end
+    end
+
+    # Honor the server's Retry-After when present, otherwise back off
+    # exponentially with jitter.
+    def retry_delay(attempt, response)
+      server_delay = retry_after_seconds(response)
+      return server_delay if server_delay
+
+      backoff = [RETRY_BASE_DELAY_SECONDS * (2**(attempt - 1)), MAX_RETRY_DELAY_SECONDS].min
+      backoff * (0.5 + (rand * 0.5))
+    end
+
+    def retry_after_seconds(response)
+      raw = response.respond_to?(:headers) ? response.headers&.[]('retry-after') : nil
+      return nil if raw.nil? || raw.to_s.strip.empty?
+
+      seconds = Float(raw, exception: false) || http_date_delay(raw)
+      return nil unless seconds
+
+      seconds.clamp(0, MAX_RETRY_DELAY_SECONDS)
+    end
+
+    # Retry-After may also be an HTTP date instead of a number of seconds.
+    def http_date_delay(raw)
+      Time.httpdate(raw.to_s) - Time.now
+    rescue ArgumentError
+      nil
     end
 
     def handle_response(response)

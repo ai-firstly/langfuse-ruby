@@ -2,6 +2,8 @@
 
 module Langfuse
   class Trace
+    include PartialUpdates
+
     attr_reader :id, :name, :user_id, :session_id, :version, :release, :input, :output,
                 :metadata, :tags, :timestamp, :public, :client
 
@@ -95,87 +97,11 @@ module Langfuse
       )
     end
 
-    # Convenience methods for enhanced observation types
-
-    # Create a child agent observation
-    def agent(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-              metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-              version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::AGENT,
-        **kwargs
-      )
-    end
-
-    # Create a child tool observation
-    def tool(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-             metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-             version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::TOOL,
-        **kwargs
-      )
-    end
-
-    # Create a child chain observation
-    def chain(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-              metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-              version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::CHAIN,
-        **kwargs
-      )
-    end
-
-    # Create a child retriever observation
-    def retriever(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-                  metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-                  version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::RETRIEVER,
-        **kwargs
-      )
-    end
+    # Convenience methods for enhanced observation types: each is a child span
+    # with a fixed as_type. (embedding keeps its own definition because it folds
+    # model/usage into metadata first.)
+    extend SpanWrappers
+    define_span_wrappers
 
     # Create a child embedding observation
     def embedding(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
@@ -200,46 +126,6 @@ module Langfuse
       )
     end
 
-    # Create a child evaluator observation
-    def evaluator(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-                  metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-                  version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::EVALUATOR,
-        **kwargs
-      )
-    end
-
-    # Create a child guardrail observation
-    def guardrail(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-                  metadata: nil, level: nil, status_message: nil, parent_observation_id: nil,
-                  version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        parent_observation_id: parent_observation_id,
-        version: version,
-        as_type: ObservationType::GUARDRAIL,
-        **kwargs
-      )
-    end
-
     def score(name:, value:, data_type: nil, comment: nil, **kwargs)
       @client.score(
         trace_id: @id,
@@ -255,19 +141,27 @@ module Langfuse
                release: nil, input: nil, output: nil, metadata: nil, tags: nil,
                public: nil, **kwargs)
       # 更新实例变量
-      @name = name if name
-      @user_id = user_id if user_id
-      @session_id = session_id if session_id
-      @version = version if version
-      @release = release if release
-      @input = input if input
-      @output = output if output
-      @metadata = metadata if metadata
-      @tags = tags if tags
+      @name = name unless name.nil?
+      @user_id = user_id unless user_id.nil?
+      @session_id = session_id unless session_id.nil?
+      @version = version unless version.nil?
+      @release = release unless release.nil?
+      @input = input unless input.nil?
+      @output = output unless output.nil?
+      @metadata.merge!(metadata) if metadata
+      @tags = tags unless tags.nil?
       @public = public unless public.nil?
       @kwargs.merge!(kwargs) if kwargs.any?
+
+      track_changes(
+        { name: name, user_id: user_id, session_id: session_id, version: version,
+          release: release, input: input, output: output, metadata: metadata,
+          tags: tags, public: public },
+        kwargs.keys
+      )
       # 触发 trace-update 事件
       update_trace
+      self
     end
 
     def get_url
@@ -294,41 +188,11 @@ module Langfuse
     private
 
     def create_trace
-      data = {
-        id: @id,
-        name: @name,
-        user_id: @user_id,
-        session_id: @session_id,
-        version: @version,
-        release: @release,
-        input: @input,
-        output: @output,
-        metadata: @metadata,
-        tags: @tags,
-        timestamp: @timestamp,
-        public: @public
-      }.merge(@kwargs).compact
-
-      @client.enqueue_event('trace-create', data)
+      @client.enqueue_event('trace-create', to_dict)
     end
 
     def update_trace
-      data = {
-        id: @id,
-        name: @name,
-        user_id: @user_id,
-        session_id: @session_id,
-        version: @version,
-        release: @release,
-        input: @input,
-        output: @output,
-        metadata: @metadata,
-        tags: @tags,
-        timestamp: @timestamp,
-        public: @public
-      }.merge(@kwargs).compact
-
-      @client.enqueue_event('trace-update', data)
+      @client.enqueue_event('trace-update', update_body, trace_ref: self)
     end
   end
 end

@@ -85,7 +85,8 @@ RSpec.describe Langfuse::Client do
     it 'flushes events when queue is not empty' do
       client.instance_variable_set(:@event_queue, [{ id: 'test', type: 'test', body: {} }])
 
-      expect(client).to receive(:post).with('/api/public/ingestion', hash_including(:batch))
+      # The batch is serialized once, up front, and handed to Faraday as a String.
+      expect(client).to receive(:post).with('/api/public/ingestion', a_string_including('"batch"'))
 
       client.flush
     end
@@ -171,7 +172,7 @@ RSpec.describe Langfuse::Client do
   end
 
   describe '#shutdown' do
-    it 'kills flush thread when auto_flush is enabled' do
+    it 'stops the flush thread when auto_flush is enabled' do
       client = Langfuse::Client.new(
         public_key: 'test_key',
         secret_key: 'test_secret',
@@ -179,9 +180,12 @@ RSpec.describe Langfuse::Client do
       )
 
       flush_thread = client.instance_variable_get(:@flush_thread)
-      expect(flush_thread).to receive(:kill)
+      expect(flush_thread).to be_alive
 
       client.shutdown
+
+      expect(flush_thread).not_to be_alive
+      expect(client.instance_variable_get(:@flush_thread)).to be_nil
     end
 
     it 'does not kill flush thread when auto_flush is disabled' do

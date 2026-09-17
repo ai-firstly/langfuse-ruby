@@ -15,6 +15,7 @@ module Langfuse
     def retriever(**) = NullSpan.new
     def embedding(**) = NullSpan.new
     def evaluator(**) = NullSpan.new
+    alias evaluator_obs evaluator
     def guardrail(**) = NullSpan.new
     def score(**) = nil
     def get_url = nil
@@ -36,6 +37,7 @@ module Langfuse
     def retriever(**) = NullSpan.new
     def embedding(**) = NullSpan.new
     def evaluator(**) = NullSpan.new
+    alias evaluator_obs evaluator
     def guardrail(**) = NullSpan.new
     def score(**) = nil
     def get_url = nil
@@ -65,10 +67,12 @@ module Langfuse
     def retriever(**) = NullSpan.new
     def embedding(**) = NullSpan.new
     def evaluator(**) = NullSpan.new
+    alias evaluator_obs evaluator
     def guardrail(**) = NullSpan.new
     def score(**) = nil
     def get_url = nil
     def to_dict = {}
     def id = nil
+    def trace_id = nil
   end
 end

@@ -140,6 +140,21 @@ RSpec.describe Langfuse::Prompt do
 
         expect(prompt.prompt[0][:content]).to eq('You are a helpful assistant for {{company}}.')
       end
+
+      it 'handles string-keyed message arrays from API responses' do
+        string_data = {
+          'id' => 'chat-1',
+          'name' => 'chat-prompt',
+          'type' => 'chat',
+          'prompt' => [
+            { 'role' => 'system', 'content' => 'Hello {{name}}' }
+          ]
+        }
+        prompt = described_class.new(string_data)
+        result = prompt.compile(name: 'World')
+
+        expect(result).to eq([{ role: 'system', content: 'Hello World' }])
+      end
     end
 
     context 'with unsupported type' do

@@ -261,7 +261,7 @@ RSpec.describe 'Langfuse Phase 0 features' do
         auto_flush: false, logger: logger
       )
 
-      log_client.enqueue_event('trace-create', id: 't', name: 't')
+      log_client.enqueue_event('trace-create', { id: 't', name: 't' })
       log_client.flush
 
       expect(logger).to have_received(:warn).with(/partial failure.*evt-1.*bad body/)
@@ -328,10 +328,12 @@ RSpec.describe 'Langfuse Phase 0 features' do
         auto_flush: true, shutdown_on_exit: false
       )
       thread = shutdown_client.instance_variable_get(:@flush_thread)
-      expect(thread).to receive(:kill).once
 
       shutdown_client.shutdown
       shutdown_client.shutdown
+
+      expect(thread).not_to be_alive
+      expect(shutdown_client.instance_variable_get(:@flush_thread)).to be_nil
     end
   end
 
