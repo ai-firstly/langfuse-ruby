@@ -49,31 +49,31 @@ if ! bundle exec rspec; then
 fi
 
 print_status "Running offline tests..."
-if ! ruby scripts/test_offline.rb; then
+if ! bundle exec ruby scripts/test_offline.rb; then
     print_error "Offline tests failed. Please fix them before releasing."
     exit 1
 fi
 
 # Build gem
 print_status "Building gem..."
-if ! gem build langfuse.gemspec; then
+if ! gem build langfuse-ruby.gemspec; then
     print_error "Gem build failed."
     exit 1
 fi
 
 # Check if gem was built successfully
-if [ ! -f "langfuse-${CURRENT_VERSION}.gem" ]; then
-    print_error "Gem file not found: langfuse-${CURRENT_VERSION}.gem"
+if [ ! -f "langfuse-ruby-${CURRENT_VERSION}.gem" ]; then
+    print_error "Gem file not found: langfuse-ruby-${CURRENT_VERSION}.gem"
     exit 1
 fi
 
-print_status "Gem built successfully: langfuse-${CURRENT_VERSION}.gem"
+print_status "Gem built successfully: langfuse-ruby-${CURRENT_VERSION}.gem"
 
 # Ask for confirmation
 echo
 echo "📋 Release Summary:"
 echo "  Version: $CURRENT_VERSION"
-echo "  Gem file: langfuse-${CURRENT_VERSION}.gem"
+echo "  Gem file: langfuse-ruby-${CURRENT_VERSION}.gem"
 echo "  Tests: ✅ Passed"
 echo
 
@@ -81,7 +81,7 @@ read -p "Do you want to proceed with the release? (y/N): " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     print_warning "Release cancelled."
-    rm -f "langfuse-${CURRENT_VERSION}.gem"
+    rm -f "langfuse-ruby-${CURRENT_VERSION}.gem"
     exit 0
 fi
 
@@ -91,12 +91,12 @@ git tag "v${CURRENT_VERSION}"
 
 # Push to git
 print_status "Pushing to git..."
-git push origin main
+git push origin master
 git push origin "v${CURRENT_VERSION}"
 
 # Publish to RubyGems
 print_status "Publishing to RubyGems..."
-if gem push "langfuse-${CURRENT_VERSION}.gem"; then
+if gem push "langfuse-ruby-${CURRENT_VERSION}.gem"; then
     print_status "Successfully published to RubyGems!"
 else
     print_error "Failed to publish to RubyGems."
@@ -105,16 +105,16 @@ else
 fi
 
 # Clean up
-rm -f "langfuse-${CURRENT_VERSION}.gem"
+rm -f "langfuse-ruby-${CURRENT_VERSION}.gem"
 
 print_status "Release completed successfully! 🎉"
 echo
 echo "📝 Next steps:"
-echo "  1. Check https://rubygems.org/gems/langfuse"
+echo "  1. Check https://rubygems.org/gems/langfuse-ruby"
 echo "  2. Update documentation if needed"
 echo "  3. Announce the release"
 echo
 echo "🔗 Useful links:"
-echo "  - RubyGems: https://rubygems.org/gems/langfuse"
+echo "  - RubyGems: https://rubygems.org/gems/langfuse-ruby"
 echo "  - GitHub: https://github.com/ai-firstly/langfuse-ruby"
 echo "  - Documentation: https://github.com/ai-firstly/langfuse-ruby#readme" 

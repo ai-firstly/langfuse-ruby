@@ -7,7 +7,8 @@ require 'langfuse'
 Langfuse.configure do |config|
   config.public_key = ENV.fetch('LANGFUSE_PUBLIC_KEY', nil)
   config.secret_key = ENV.fetch('LANGFUSE_SECRET_KEY', nil)
-  config.host = ENV['LANGFUSE_HOST'] || 'https://cloud.langfuse.com'
+  config.host = ENV['LANGFUSE_HOST'] || ENV['LANGFUSE_BASE_URL'] || 'https://us.cloud.langfuse.com'
+  config.ingestion_mode = :otel # Langfuse v4
 end
 
 puts '🚀 Simplified usage example...'
@@ -26,10 +27,10 @@ result = Langfuse.trace('simplified-chat', user_id: 'user-123', input: { message
 
   # Simulate LLM response
   response_content = "Hi there! How can I help you today?"
-  usage = { prompt_tokens: 10, completion_tokens: 15, total_tokens: 25 }
+  usage_details = { input: 10, output: 15, total: 25 }
 
-  # End the generation with output and usage
-  generation.end(output: response_content, usage: usage)
+  # End the generation with output and v4 usage_details (cost model)
+  generation.end(output: response_content, usage_details: usage_details)
 
   # Update trace with final output
   trace.update(output: response_content)
@@ -54,7 +55,7 @@ Langfuse.trace('document-qa', user_id: 'user-456') do |trace|
     model: 'text-embedding-ada-002',
     input: 'What is Ruby?',
     output: [0.1, 0.2, 0.3],
-    usage: { prompt_tokens: 5, total_tokens: 5 }
+    usage_details: { input: 5, total: 5 }
   )
   
   retrieval.end(output: { documents: ['Ruby is a programming language...'] })
@@ -70,7 +71,7 @@ Langfuse.trace('document-qa', user_id: 'user-456') do |trace|
   
   gen.end(
     output: 'Ruby is a dynamic, object-oriented programming language.',
-    usage: { prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 }
+    usage_details: { input: 50, output: 20, total: 70 }
   )
   
   answer_span.end(output: { answer: 'Ruby is a dynamic programming language.' })

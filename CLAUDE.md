@@ -36,8 +36,8 @@ bundle exec rubocop
 # Build the gem
 bundle exec rake build
 
-# Release to RubyGems
-bundle exec rake release_gem
+# Release: bump version + CHANGELOG, then `make tag VERSION=x.y.z`
+# (pushes v* tag; GitHub Actions publishes to RubyGems)
 ```
 
 ## Architecture
@@ -58,14 +58,20 @@ bundle exec rake release_gem
 - **`Langfuse::OtelExporter`** ([lib/langfuse/otel_exporter.rb](lib/langfuse/otel_exporter.rb)) - Maps Langfuse events to OTLP/HTTP JSON when `ingestion_mode: :otel`.
 - **`Langfuse::NullTrace/NullGeneration/NullSpan`** ([lib/langfuse/null_objects.rb](lib/langfuse/null_objects.rb)) - Null objects for graceful degradation.
 
+New projects should set `ingestion_mode: :otel` (Langfuse v4 / OTLP). The
+default remains `:legacy` for compatibility; Cloud stops accepting non-score
+`/api/public/ingestion` traffic on 16 November 2026. See [docs/V4.md](docs/V4.md).
+
 ### Simplified API (Recommended)
 
 ```ruby
+Langfuse.configure { |c| c.ingestion_mode = :otel }  # Langfuse v4
+
 # Block-based tracing with automatic flush
 Langfuse.trace("my-trace", user_id: "user-1") do |trace|
   gen = trace.generation(name: "openai", model: "gpt-4", input: messages)
   response = call_llm(...)
-  gen.end(output: response, usage: usage)
+  gen.end(output: response, usage_details: { input: 10, output: 20, total: 30 })
 end  # Auto flush!
 
 # Get prompt with variables and retry
@@ -99,7 +105,9 @@ Enhanced types are implemented as spans with `as_type` metadata sent to the API.
 Client accepts config via:
 1. Constructor parameters
 2. `Langfuse.configure` block
-3. Environment variables: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` / `LANGFUSE_BASE_URL`, `LANGFUSE_FLUSH_INTERVAL`, `LANGFUSE_FLUSH_AT`, `LANGFUSE_MAX_QUEUE_SIZE`, `LANGFUSE_AUTO_FLUSH`, `LANGFUSE_TRACING_ENVIRONMENT`, `LANGFUSE_SAMPLE_RATE`, `LANGFUSE_DEBUG`, `LANGFUSE_INGESTION_MODE`
+3. Environment variables: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` / `LANGFUSE_BASE_URL`, `LANGFUSE_FLUSH_INTERVAL`, `LANGFUSE_FLUSH_AT`, `LANGFUSE_MAX_QUEUE_SIZE`, `LANGFUSE_AUTO_FLUSH`, `LANGFUSE_TRACING_ENVIRONMENT`, `LANGFUSE_SAMPLE_RATE`, `LANGFUSE_DEBUG`, `LANGFUSE_INGESTION_MODE` (`otel` for v4, `legacy` for pre-v4)
+
+Default host is `https://us.cloud.langfuse.com`. Default `ingestion_mode` is `:legacy`; use `:otel` for Langfuse v4.
 
 `http_adapter` is constructor/`configure`-only (no env var), since the adapter has to be in the app's `Gemfile` anyway.
 

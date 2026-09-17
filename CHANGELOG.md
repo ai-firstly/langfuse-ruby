@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-17
+
+### Documentation
+- README and examples now lead with **Langfuse v4** (`ingestion_mode: :otel`): OTLP ingestion, observations-first tracing, `usage_details` / `cost_details`, typed observations, and the Cloud cutoff of non-score `/api/public/ingestion` traffic on 16 November 2026
+- Added [docs/V4.md](docs/V4.md) (attribute mapping, scores, cutover checklist) and `examples/v4_otel_tracing.rb`
+
 ### Fixed
 - **`Langfuse.trace` executed the block twice**: an exception raised inside the block was caught by the method-level `rescue` and the block was re-run with a `NullTrace` — duplicating LLM calls and their cost. Only trace creation degrades to `NullTrace` now; exceptions from the block propagate untouched
 - **Typed API errors collapsed into `APIError`**: `AuthenticationError` / `RateLimitError` / `ValidationError` raised by `handle_response` were re-wrapped by the generic `rescue` in `#request`, so callers could not rescue them selectively

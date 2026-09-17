@@ -2,17 +2,20 @@
 
 [![Gem Version](https://badge.fury.io/rb/langfuse-ruby.svg)](https://badge.fury.io/rb/langfuse-ruby) [![CI](https://github.com/ai-firstly/langfuse-ruby/workflows/CI/badge.svg)](https://github.com/ai-firstly/langfuse-ruby/actions/workflows/ci.yml) [![Ruby](https://img.shields.io/badge/ruby-%3E%3D%203.1.0-red.svg)](https://www.ruby-lang.org/) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Ruby SDK for [Langfuse](https://langfuse.com) - the open-source LLM engineering platform. This SDK provides comprehensive tracing, prompt management, and evaluation capabilities for LLM applications.
+Ruby SDK for [Langfuse](https://langfuse.com) — the open-source LLM engineering platform. Tracing, prompt management, and evaluation for Ruby LLM apps, with first-class support for the **Langfuse v4** observations-first data model.
+
+**New projects should use `ingestion_mode: :otel` (Langfuse v4).** That path sends traces over OTLP/HTTP (`/api/public/otel/v1/traces`) with `x-langfuse-ingestion-version: 4`, so data shows up in real time and observation-level evaluators, cost, and the Observations API v2 work as designed. The tracing API (`Langfuse.trace`, `#generation`, `#span`, `#agent`, …) is unchanged; only the transport and ID format differ.
+
+On Langfuse Cloud, `POST /api/public/ingestion` stops accepting everything except scores on **16 November 2026**. Self-hosted v4 should use OTEL as well. See the [Langfuse v4 guide](docs/V4.md) and the official [custom-ingestion migration](https://langfuse.com/integrations/native/opentelemetry/migration-to-v4).
 
 ## Features
 
-- 🔍 **Tracing**: Complete observability for LLM applications with traces, spans, and generations
-- 📝 **Prompt Management**: Version control and deployment of prompts with caching
-- 📊 **Evaluation**: Built-in evaluators and custom scoring capabilities
-- 🎯 **Events**: Generic event tracking for custom application events and logging
-- 🚀 **Async Processing**: Background event processing with automatic batching
-- 🔒 **Type Safety**: Comprehensive error handling and validation
-- 🎯 **Framework Integration**: Easy integration with popular Ruby frameworks
+- ⚡ **Langfuse v4 / OpenTelemetry**: OTLP ingestion, W3C hex IDs, `usage_details` / `cost_details`, observation types (`agent`, `tool`, `retriever`, …)
+- 🔍 **Tracing**: Traces, spans, generations, events, and typed observations
+- 📝 **Prompt Management**: Versioned prompts with a bounded cache and stale-on-outage reads
+- 📊 **Evaluation**: Built-in evaluators and scores (trace, observation, session, dataset run)
+- 🚀 **Async Processing**: Background batching, queue bounds, fork-safe flush, `at_exit` shutdown
+- 🔒 **Resilience**: Typed errors, Retry-After + jittered backoff, null-object degradation for `Langfuse.trace`
 
 ## Installation
 
@@ -49,110 +52,121 @@ bundle install                     # install gem dependencies
 bundle exec rake spec              # run the test suite
 ```
 
-## Quick Start
+## Quick Start (Langfuse v4)
 
-### 1. Initialize the Client
+### 1. Configure the client for v4
+
+The SDK default host is **US Cloud** (`https://us.cloud.langfuse.com`). Override
+`host` / `LANGFUSE_HOST` / `LANGFUSE_BASE_URL` for EU, Japan, HIPAA, or
+self-hosted. `ingestion_mode` still defaults to `:legacy` for compatibility;
+set it to `:otel` for v4.
 
 ```ruby
-require 'langfuse'
+require "langfuse"
 
-# Initialize with API keys
-client = Langfuse.new(
-  public_key: "pk-lf-...",
-  secret_key: "sk-lf-...",
-  host: "https://cloud.langfuse.com"  # Optional, defaults to cloud.langfuse.com
-)
-
-# Or configure globally
 Langfuse.configure do |config|
-  config.public_key = "pk-lf-..."
-  config.secret_key = "sk-lf-..."
-  config.host = "https://cloud.langfuse.com"
+  config.public_key = ENV.fetch("LANGFUSE_PUBLIC_KEY")
+  config.secret_key = ENV.fetch("LANGFUSE_SECRET_KEY")
+  config.host = ENV["LANGFUSE_HOST"] || ENV["LANGFUSE_BASE_URL"] || "https://us.cloud.langfuse.com"
+  config.ingestion_mode = :otel   # Langfuse v4 — required for real-time OTEL ingestion
 end
 
-client = Langfuse.new
+# Equivalent:
+#   Langfuse.new(..., ingestion_mode: :otel)
+#   LANGFUSE_INGESTION_MODE=otel
 ```
 
-### OpenTelemetry (OTEL) Ingestion Mode
+| Region | `host` |
+| --- | --- |
+| US (SDK default) | `https://us.cloud.langfuse.com` |
+| EU | `https://cloud.langfuse.com` |
+| Japan | `https://jp.cloud.langfuse.com` |
+| HIPAA | `https://hipaa.cloud.langfuse.com` |
+| Self-hosted | your Langfuse origin (no trailing path) |
 
-Langfuse v4 introduces a faster data model powered by OpenTelemetry. To use
-it, enable the OTEL ingestion mode. This sends data via the OTLP/HTTP JSON
-endpoint (`/api/public/otel/v1/traces`) with the `x-langfuse-ingestion-version: 4`
-header for real-time ingestion and observation-level online evaluators.
+No extra gems are required. The SDK maps traces/spans/generations to OTLP JSON
+and sets `x-langfuse-ingestion-version: 4` on the OTEL connection.
+
+### 2. Trace an LLM call (recommended API)
+
+v4 is **observations-first**: a trace is the set of observations that share a
+`trace_id`. Put the overall request/response on the trace (root span) **and**
+on the generation/span that actually produced them. Prefer `usage_details` /
+`cost_details` over the legacy `usage` hash — v4 uses `usage_details` for cost.
 
 ```ruby
-# Via constructor
-client = Langfuse.new(
-  public_key: "pk-lf-...",
-  secret_key: "sk-lf-...",
-  ingestion_mode: :otel
-)
+Langfuse.trace("chat-completion", user_id: "user-123", session_id: "sess-456",
+               input: { message: "Hello, world!" }) do |trace|
+  generation = trace.generation(
+    name: "openai-completion",
+    model: "gpt-4o",
+    input: [{ role: "user", content: "Hello, world!" }],
+    model_parameters: { temperature: 0.7, max_tokens: 100 }
+  )
 
-# Via global configuration
-Langfuse.configure do |config|
-  config.public_key = "pk-lf-..."
-  config.secret_key = "sk-lf-..."
-  config.ingestion_mode = :otel
+  response = call_llm(...)  # your code
+
+  generation.end(
+    output: response.content,
+    usage_details: { input: 12, output: 18, total: 30 },   # v4 cost model
+    cost_details: { input: 0.0001, output: 0.0006, total: 0.0007 }
+  )
+  generation.score(name: "faithfulness", value: 0.9)
+
+  trace.update(output: response.content)
+end  # flush is automatic in the block form
+```
+
+Scores always go through `/api/public/ingestion` (`score-create`), even in
+`:otel` mode. Trace/observation IDs are normalized to W3C hex so they attach to
+the OTEL-ingested spans. If an OTEL export fails mid-batch, both the OTEL
+events and that batch's scores are re-queued.
+
+### 3. Nested work with v4 observation types
+
+Typed observations (`agent`, `tool`, `chain`, `retriever`, `embedding`,
+`evaluator`, `guardrail`) are spans with `langfuse.observation.type` set. They
+filter and evaluate correctly in the v4 UI.
+
+```ruby
+Langfuse.trace("document-qa", user_id: "user-456", input: { query: "What is Ruby?" }) do |trace|
+  agent = trace.agent(name: "qa-agent", input: { query: "What is Ruby?" })
+
+  retrieval = agent.retriever(name: "vector-search", input: { query: "What is Ruby?", top_k: 5 })
+  retrieval.end(output: { documents: ["Ruby is a programming language..."] })
+
+  gen = agent.generation(
+    name: "openai-completion",
+    model: "gpt-4o",
+    input: [{ role: "user", content: "What is Ruby?" }],
+    prompt: Langfuse.get_prompt("qa-system")  # optional prompt link
+  )
+  gen.end(
+    output: "Ruby is a dynamic programming language.",
+    usage_details: { input: 50, output: 20, total: 70 }
+  )
+
+  agent.end(output: { answer: "Ruby is a dynamic programming language." })
+  trace.update(output: { answer: "Ruby is a dynamic programming language." })
 end
-
-# Via environment variable
-# LANGFUSE_INGESTION_MODE=otel
 ```
 
-All existing tracing APIs work unchanged. The SDK maps Langfuse events to
-OpenTelemetry spans with the appropriate `langfuse.*` and `gen_ai.*` attributes.
-No additional dependencies are required.
+### What `:otel` changes (and what it does not)
 
-Because the v4 data model is append-only, the `*-create` and `*-update` events of
-one observation are collapsed into a single span before export — sending both
-would store the observation twice. Token usage is mapped to both the
-`gen_ai.usage.*` conventions and `langfuse.observation.usage_details` (what v4
-uses for cost), accepting every legacy `usage` shape (`promptTokens`,
-`inputTokens`, `input`). OTLP payloads are chunked to the batch size limit, and
-`partialSuccess` responses are logged as warnings.
+| | `:otel` (v4, recommended) | `:legacy` |
+| --- | --- | --- |
+| Transport | OTLP/HTTP JSON `/api/public/otel/v1/traces` | batched POST `/api/public/ingestion` |
+| Header | `x-langfuse-ingestion-version: 4` | none |
+| IDs | W3C 32-char trace / 16-char span hex | UUIDs |
+| Create + update | collapsed into **one** span (v4 is append-only) | sent as separate events |
+| Usage | `usage` normalized into `langfuse.observation.usage_details` + `gen_ai.usage.*` | legacy `usage` object |
+| Scores | still the ingestion API, IDs coerced to hex | ingestion API |
+| Tracing API | identical | identical |
 
-**Scores in OTel mode:** scores are not part of the OTLP trace mapping. The SDK
-always sends them through the ingestion API (`/api/public/ingestion`) as
-`score-create` events, and normalizes `trace_id` / `observation_id` to W3C hex
-IDs so they attach to the correct OTel-ingested entities. If an OTEL export
-fails mid-batch, both the OTEL events and any scores from that batch are
-re-queued for retry.
-
-```ruby
-# Scores work the same in both modes
-client = Langfuse.new(ingestion_mode: :otel, ...)
-trace = client.trace(name: "chat")
-generation = trace.generation(name: "llm", model: "gpt-4o")
-generation.score(name: "faithfulness", value: 0.9)
-client.flush  # traces/spans → OTLP; scores → ingestion API
-```
-
-### 2. Basic Tracing
-
-```ruby
-# Create a trace
-trace = client.trace(
-  name: "chat-completion",
-  user_id: "user123",
-  session_id: "session456",
-  environment: "production"
-)
-
-# Add a generation (LLM call)
-generation = trace.generation(
-  name: "openai-completion",
-  model: "gpt-3.5-turbo",
-  input: [{ role: "user", content: "Hello, world!" }],
-  model_parameters: { temperature: 0.7, max_tokens: 100 }
-)
-
-generation.end(output: 'Hello! How can I help you today?', usage: { prompt_tokens: 10, completion_tokens: 15, total_tokens: 25 })
-
-trace.update(output: 'Hello! How can I help you today?')
-
-# Flush events (optional - happens automatically)
-client.flush
-```
+Do not dual-send the same IDs through both modes into one project. Switch with
+`ingestion_mode:` / `LANGFUSE_INGESTION_MODE` (values are downcased; a typo
+falls back to `:legacy` with a warning). Full attribute mapping, evaluator
+notes, and a cutover checklist: [docs/V4.md](docs/V4.md).
 
 ## Simplified Usage (Recommended)
 
@@ -163,10 +177,11 @@ For most use cases, you can use the simplified class-level API with automatic fl
 ```ruby
 require 'langfuse'
 
-# Configure once
+# Configure once — v4 / OTEL is the recommended ingestion path
 Langfuse.configure do |config|
-  config.public_key = ENV['LANGFUSE_PUBLIC_KEY']
-  config.secret_key = ENV['LANGFUSE_SECRET_KEY']
+  config.public_key = ENV["LANGFUSE_PUBLIC_KEY"]
+  config.secret_key = ENV["LANGFUSE_SECRET_KEY"]
+  config.ingestion_mode = :otel
 end
 
 # Use block-based tracing - flush happens automatically!
@@ -182,7 +197,10 @@ Langfuse.trace("my-trace", user_id: "user-1", input: { message: "Hello" }) do |t
   response = call_openai(...)
 
   # Record the response
-  generation.end(output: response.content, usage: response.usage)
+  generation.end(
+    output: response.content,
+    usage_details: { input: 10, output: 15, total: 25 }  # or usage: response.usage
+  )
   trace.update(output: response.content)
 end  # Automatic flush here!
 ```
@@ -228,7 +246,7 @@ Langfuse.shutdown
 Langfuse.reset!
 ```
 
-### 3. Nested Spans
+## Nested Spans
 
 ```ruby
 trace = client.trace(name: "document-qa")
@@ -272,7 +290,46 @@ llm_gen = answer_span.generation(
   ]
 )
 
-answer_span.end(output: { answer: "Machine learning is a subset of AI..." }, usage: { prompt_tokens: 50, completion_tokens: 30, total_tokens: 80 })
+llm_gen.end(
+  output: { answer: "Machine learning is a subset of AI..." },
+  usage_details: { input: 50, output: 30, total: 80 }
+)
+answer_span.end(output: { answer: "Machine learning is a subset of AI..." })
+```
+
+## Observation Types (v4)
+
+Langfuse v4 queries **observations** directly. Use a specific type so traces
+filter and evaluate correctly. Helpers exist on `Client`, `Trace`, `Span`, and
+`Generation`. `as_type:` on `#span` does the same thing; an explicit `as_type:`
+passed to a typed helper cannot override that helper's type.
+
+| Helper | `langfuse.observation.type` | Use for |
+| --- | --- | --- |
+| `#span` | `span` | generic timed work |
+| `#generation` | `generation` | LLM calls (model, tokens, cost, prompt link) |
+| `#event` | `event` | point-in-time logs |
+| `#agent` | `agent` | orchestration / tool-calling loops |
+| `#tool` | `tool` | a single function or API call |
+| `#chain` | `chain` | stitching retrieval → generation, etc. |
+| `#retriever` | `retriever` | vector store / DB lookups |
+| `#embedding` | `embedding` | embedding model calls (`model` / `usage` go into metadata) |
+| `#evaluator` / `#evaluator_obs` | `evaluator` | scoring functions (`Client#evaluator` is an alias of `#evaluator_obs`) |
+| `#guardrail` | `guardrail` | safety / moderation |
+
+```ruby
+trace = client.trace(name: "support-agent", user_id: "u1")
+
+agent = trace.agent(name: "planner", input: { question: "Reset my password" })
+tool  = agent.tool(name: "lookup-user", input: { email: "a@example.com" })
+tool.end(output: { user_id: "u1" })
+
+guard = agent.guardrail(name: "content-filter", input: { text: "Reset my password" })
+guard.end(output: { blocked: false })
+
+gen = agent.generation(name: "reply", model: "gpt-4o", input: [...])
+gen.end(output: "I can help with that.", usage_details: { input: 40, output: 12, total: 52 })
+agent.end(output: { reply: "I can help with that." })
 ```
 
 ## Events
@@ -472,7 +529,7 @@ sampled_client = Langfuse.new(
 masked_client = Langfuse.new(
   public_key: "pk-lf-...",
   secret_key: "sk-lf-...",
-  mask: ->(value) { value.to_s.gsub(/\b\d{16}\b, "***CARD***") }
+  mask: ->(value) { value.to_s.gsub(/\b\d{16}\b/, "***CARD***") }
 )
 ```
 
@@ -534,7 +591,7 @@ client.score(
 client.score(name: "label", value: "good", trace_id: "t1", data_type: "CATEGORICAL")
 ```
 
-### Generation usage details, cost details and prompt linking
+### Generation usage details, cost details and prompt linking (v4)
 
 ```ruby
 # New v4 usage model (arbitrary keys, e.g. cache tokens)
@@ -580,7 +637,8 @@ end
 client = Langfuse.new(
   public_key: "pk-lf-...",
   secret_key: "sk-lf-...",
-  host: "https://your-instance.langfuse.com",
+  host: "https://us.cloud.langfuse.com", # US default; EU: cloud.langfuse.com
+  ingestion_mode: :otel, # Langfuse v4 (default remains :legacy)
   debug: true,          # Enable debug logging (or LANGFUSE_DEBUG=true)
   timeout: 30,          # Request timeout in seconds
   retries: 3,           # Number of retry attempts
@@ -629,7 +687,7 @@ You can also configure the client using environment variables:
 ```bash
 export LANGFUSE_PUBLIC_KEY="pk-lf-..."
 export LANGFUSE_SECRET_KEY="sk-lf-..."
-export LANGFUSE_HOST="https://cloud.langfuse.com"   # or LANGFUSE_BASE_URL
+export LANGFUSE_HOST="https://us.cloud.langfuse.com"  # or LANGFUSE_BASE_URL; EU: https://cloud.langfuse.com
 export LANGFUSE_FLUSH_INTERVAL=5
 export LANGFUSE_FLUSH_AT=15
 export LANGFUSE_MAX_QUEUE_SIZE=10000
@@ -637,7 +695,7 @@ export LANGFUSE_AUTO_FLUSH=true
 export LANGFUSE_TRACING_ENVIRONMENT="production"
 export LANGFUSE_SAMPLE_RATE=0.5
 export LANGFUSE_DEBUG=false
-export LANGFUSE_INGESTION_MODE=legacy   # or otel
+export LANGFUSE_INGESTION_MODE=otel     # v4; use `legacy` only for pre-v4 self-hosted
 ```
 
 ### Automatic Flush Control
@@ -724,6 +782,7 @@ client.shutdown
 Langfuse.configure do |config|
   config.public_key = Rails.application.credentials.langfuse_public_key
   config.secret_key = Rails.application.credentials.langfuse_secret_key
+  config.ingestion_mode = :otel
   config.debug = Rails.env.development?
 end
 
@@ -779,18 +838,22 @@ end
 
 Check out the `examples/` directory for more comprehensive examples:
 
-- [Basic Tracing](examples/basic_tracing.rb)
-- [Prompt Management](examples/prompt_management.rb)
-- [Evaluation Pipeline](examples/evaluation_pipeline.rb)
-- [Rails Integration](examples/rails_integration.rb)
+- [Langfuse v4 / OTEL tracing](examples/v4_otel_tracing.rb) (recommended)
+- [Simplified usage](examples/simplified_usage.rb)
+- [Basic tracing](examples/basic_tracing.rb)
+- [Prompt management](examples/prompt_management.rb)
+- [Events](examples/event_usage.rb)
+- [Auto-flush control](examples/auto_flush_control.rb)
+- [Connection config](examples/connection_config_demo.rb)
 
 ## Documentation
 
-For more detailed information, please refer to the [documentation](docs/README.md).
-
+- [Langfuse v4 usage](docs/V4.md) — OTEL ingestion, observations-first model, cutover checklist
+- [Documentation index](docs/README.md)
 - [Publishing Guide](docs/PUBLISH_GUIDE.md)
 - [Release Checklist](docs/RELEASE_CHECKLIST.md)
-- [Examples](examples/)
+- [Official Langfuse docs](https://langfuse.com/docs)
+- [Migrate custom ingestion to v4](https://langfuse.com/integrations/native/opentelemetry/migration-to-v4)
 
 ## Development
 
@@ -826,4 +889,5 @@ The gem is available as open source under the terms of the [MIT License](https:/
 
 - [Langfuse Ruby SDK Documentation](https://rubydoc.info/gems/langfuse-ruby)
 - [RubyGems](https://rubygems.org/gems/langfuse-ruby)
-- [Langfuse Documentation](https://langfuse.com/docs) 
+- [Langfuse Documentation](https://langfuse.com/docs)
+- [Langfuse v4 / OpenTelemetry](https://langfuse.com/integrations/native/opentelemetry) 

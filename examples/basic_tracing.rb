@@ -7,7 +7,8 @@ require 'langfuse'
 client = Langfuse.new(
   public_key: ENV.fetch('LANGFUSE_PUBLIC_KEY', nil),
   secret_key: ENV.fetch('LANGFUSE_SECRET_KEY', nil),
-  host: ENV['LANGFUSE_HOST'] || 'https://cloud.langfuse.com'
+  host: ENV['LANGFUSE_HOST'] || ENV['LANGFUSE_BASE_URL'] || 'https://us.cloud.langfuse.com',
+  ingestion_mode: :otel # Langfuse v4
 )
 
 puts '🚀 Starting basic tracing example...'
@@ -35,10 +36,10 @@ generation = trace.generation(
     { role: 'user', content: 'Hello, how are you?' }
   ],
   output: { content: "I'm doing well, thank you! How can I help you today?" },
-  usage: {
-    prompt_tokens: 12,
-    completion_tokens: 18,
-    total_tokens: 30
+  usage_details: {
+    input: 12,
+    output: 18,
+    total: 30
   },
   model_parameters: {
     temperature: 0.7,
@@ -71,7 +72,7 @@ retrieval_span.generation(
   model: 'text-embedding-ada-002',
   input: 'What is machine learning?',
   output: [0.1, 0.2, 0.3, 0.4, 0.5], # Simplified embedding
-  usage: { prompt_tokens: 5, total_tokens: 5 }
+  usage_details: { input: 5, total: 5 }
 )
 
 # End retrieval span
@@ -113,10 +114,10 @@ answer_gen = answer_span.generation(
   output: {
     content: 'Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. ML algorithms identify patterns in data and use these patterns to make predictions or decisions.'
   },
-  usage: {
-    prompt_tokens: 85,
-    completion_tokens: 45,
-    total_tokens: 130
+  usage_details: {
+    input: 85,
+    output: 45,
+    total: 130
   }
 )
 
