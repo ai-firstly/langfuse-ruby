@@ -57,23 +57,7 @@ module Langfuse
     end
 
     def create_event
-      data = {
-        id: @id,
-        trace_id: @trace_id,
-        name: @name,
-        start_time: @start_time,
-        input: @input,
-        output: @output,
-        metadata: @metadata,
-        level: @level,
-        status_message: @status_message,
-        parent_observation_id: @parent_observation_id,
-        version: @version
-      }
-      data[:type] = @as_type if @as_type
-      data = data.merge(@kwargs).compact
-
-      @client.enqueue_event('event-create', data)
+      @client.enqueue_event('event-create', to_dict)
     end
   end
 end

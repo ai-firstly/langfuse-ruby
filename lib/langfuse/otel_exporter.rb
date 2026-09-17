@@ -9,6 +9,15 @@ module Langfuse
   class OtelExporter
     OTEL_ENDPOINT = '/api/public/otel/v1/traces'
 
+    # Event types that carry the full state of an observation on every emit, so a
+    # later event supersedes the earlier one for the same observation id.
+    OBSERVATION_EVENT_TYPES = %w[span-create span-update generation-create generation-update].freeze
+
+    # Token keys accepted on the legacy `usage` object, in priority order.
+    USAGE_INPUT_KEYS = %w[promptTokens prompt_tokens inputTokens input_tokens input].freeze
+    USAGE_OUTPUT_KEYS = %w[completionTokens completion_tokens outputTokens output_tokens output].freeze
+    USAGE_TOTAL_KEYS = %w[totalTokens total_tokens total].freeze
+
     class << self
       # Convert an ID (UUID or hex string) to an OTEL 32-char hex trace ID.
       # OTEL trace IDs are 16 bytes (32 hex chars). Native hex IDs pass through unchanged.
@@ -70,7 +79,7 @@ module Langfuse
     # Build the top-level resourceSpans array from events.
     # Groups events by trace_id, producing one scopeSpan per trace.
     def build_resource_spans(events)
-      grouped = group_events_by_trace(events)
+      grouped = group_events_by_trace(collapse_observation_events(events))
 
       scope_spans = grouped.map do |_trace_id, trace_events|
         spans = trace_events.filter_map { |event| convert_event_to_span(event) }
@@ -91,6 +100,40 @@ module Langfuse
         },
         scopeSpans: scope_spans
       }]
+    end
+
+    # Collapse the create/update events of one observation into a single event.
+    # The v4 data model is append-only, so exporting both would produce two
+    # observations sharing a span id. Bodies are merged into new hashes, leaving
+    # the queued events untouched for re-queueing when the export fails.
+    def collapse_observation_events(events)
+      position_by_id = {}
+
+      events.each_with_object([]) do |event, collapsed|
+        id = observation_event_id(event)
+
+        if id.nil?
+          collapsed << event
+        elsif (position = position_by_id[id])
+          previous = collapsed[position]
+          collapsed[position] = previous.merge(
+            type: event[:type],
+            body: previous[:body].merge(event[:body])
+          )
+        else
+          position_by_id[id] = collapsed.length
+          collapsed << event
+        end
+      end
+    end
+
+    def observation_event_id(event)
+      return nil unless OBSERVATION_EVENT_TYPES.include?(event[:type])
+
+      body = event[:body]
+      return nil unless body.is_a?(Hash)
+
+      body['id'] || body[:id]
     end
 
     # Group events by their trace ID for proper OTEL span hierarchy.
@@ -251,19 +294,63 @@ module Langfuse
         end
       end
 
-      usage = body['usage']
-      if usage.is_a?(Hash)
-        add_attr(attributes, 'gen_ai.usage.prompt_tokens', usage['promptTokens'] || usage['prompt_tokens'])
-        add_attr(attributes, 'gen_ai.usage.completion_tokens', usage['completionTokens'] || usage['completion_tokens'])
-        total = usage['totalTokens'] || usage['total_tokens']
-        add_attr(attributes, 'gen_ai.usage.total_tokens', total) if total
-      end
-
-      add_json_attr(attributes, 'langfuse.observation.usage_details', body['usageDetails'])
+      add_usage_attributes(attributes, body)
       add_json_attr(attributes, 'langfuse.observation.cost_details', body['costDetails'])
       add_attr(attributes, 'langfuse.observation.prompt.name', body['promptName'])
       add_attr(attributes, 'langfuse.observation.prompt.version', body['promptVersion'])
       add_attr(attributes, 'langfuse.observation.completion_start_time', body['completionStartTime'])
+    end
+
+    # Emit token usage both as gen_ai.* semantic conventions and as the Langfuse
+    # v4 usage_details model. usage_details is what v4 uses for cost, so a legacy
+    # `usage` object is normalized into it when no explicit usage_details exists.
+    def add_usage_attributes(attributes, body)
+      usage = normalize_legacy_usage(body['usage'])
+
+      if usage
+        add_attr(attributes, 'gen_ai.usage.prompt_tokens', usage[:input])
+        add_attr(attributes, 'gen_ai.usage.completion_tokens', usage[:output])
+        add_attr(attributes, 'gen_ai.usage.total_tokens', usage[:total])
+      end
+
+      usage_details = body['usageDetails']
+      usage_details = usage if blank_value?(usage_details)
+      add_json_attr(attributes, 'langfuse.observation.usage_details', usage_details)
+    end
+
+    # Accept every shape the legacy ingestion API allowed
+    # (promptTokens / inputTokens / input) and return {input:, output:, total:}.
+    # Non-token units are skipped: usage_details is token-based, so mapping them
+    # would produce wrong cost numbers.
+    def normalize_legacy_usage(usage)
+      return nil unless usage.is_a?(Hash) && !usage.empty?
+
+      unit = usage['unit'] || usage[:unit]
+      if unit && unit.to_s.upcase != 'TOKENS'
+        log_debug { "Skipping usage with unit #{unit}; use usage_details for non-token usage" }
+        return nil
+      end
+
+      normalized = {
+        input: fetch_usage_value(usage, USAGE_INPUT_KEYS),
+        output: fetch_usage_value(usage, USAGE_OUTPUT_KEYS),
+        total: fetch_usage_value(usage, USAGE_TOTAL_KEYS)
+      }.compact
+
+      normalized.empty? ? nil : normalized
+    end
+
+    def fetch_usage_value(usage, keys)
+      keys.each do |key|
+        value = usage[key]
+        return value unless value.nil?
+      end
+
+      nil
+    end
+
+    def blank_value?(value)
+      value.nil? || (value.respond_to?(:empty?) && value.empty?)
     end
 
     def to_otel_trace_id(id_str)
@@ -279,14 +366,17 @@ module Langfuse
       return '0' unless timestamp_str
 
       time = Time.parse(timestamp_str.to_s)
-      (time.to_f * 1_000_000_000).to_i.to_s
+      (time.to_i * 1_000_000_000 + time.nsec).to_s
     rescue ArgumentError
       '0'
     end
 
     # Add a string/numeric attribute to the attributes array.
+    # Structured values are JSON-encoded instead of falling back to Ruby's
+    # inspect format (which is not machine-readable on the Langfuse side).
     def add_attr(attributes, key, value)
       return if value.nil?
+      return add_json_attr(attributes, key, value) if value.is_a?(Hash) || value.is_a?(Array)
 
       otel_value = case value
                    when String

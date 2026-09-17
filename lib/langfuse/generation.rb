@@ -2,6 +2,8 @@
 
 module Langfuse
   class Generation
+    include PartialUpdates
+
     attr_reader :id, :trace_id, :name, :start_time, :end_time, :completion_start_time,
                 :model, :model_parameters, :input, :output, :usage, :usage_details, :cost_details,
                 :prompt_name, :prompt_version, :metadata, :level,
@@ -43,35 +45,48 @@ module Langfuse
                model_parameters: nil, input: nil, output: nil, usage: nil,
                usage_details: nil, cost_details: nil, prompt: nil, metadata: nil,
                level: nil, status_message: nil, version: nil, **kwargs)
-      @name = name if name
-      @end_time = end_time if end_time
-      @completion_start_time = completion_start_time if completion_start_time
-      @model = model if model
+      @name = name unless name.nil?
+      @end_time = end_time unless end_time.nil?
+      @completion_start_time = completion_start_time unless completion_start_time.nil?
+      @model = model unless model.nil?
       @model_parameters.merge!(model_parameters) if model_parameters
-      @input = input if input
-      @output = output if output
+      @input = input unless input.nil?
+      @output = output unless output.nil?
       @usage.merge!(usage) if usage
       @usage_details.merge!(usage_details) if usage_details
       @cost_details.merge!(cost_details) if cost_details
       @prompt_name, @prompt_version = extract_prompt_info(prompt) if prompt
       @metadata.merge!(metadata) if metadata
-      @level = level if level
-      @status_message = status_message if status_message
-      @version = version if version
+      @level = level unless level.nil?
+      @status_message = status_message unless status_message.nil?
+      @version = version unless version.nil?
       @kwargs.merge!(kwargs)
 
+      changes = { name: name, end_time: end_time, completion_start_time: completion_start_time,
+                  model: model, model_parameters: model_parameters, input: input, output: output,
+                  usage: usage, usage_details: usage_details, cost_details: cost_details,
+                  metadata: metadata, level: level, status_message: status_message,
+                  version: version }
+      changes.merge!(prompt_name: @prompt_name, prompt_version: @prompt_version) if prompt
+
+      track_changes(changes, kwargs.keys)
       update_generation
       self
     end
 
     def end(output: nil, end_time: nil, usage: nil, usage_details: nil, cost_details: nil, **kwargs)
       @end_time = end_time || Utils.current_timestamp
-      @output = output if output
+      @output = output unless output.nil?
       @usage.merge!(usage) if usage
       @usage_details.merge!(usage_details) if usage_details
       @cost_details.merge!(cost_details) if cost_details
       @kwargs.merge!(kwargs)
 
+      track_changes(
+        { end_time: @end_time, output: output, usage: usage,
+          usage_details: usage_details, cost_details: cost_details },
+        kwargs.keys
+      )
       update_generation
       self
     end
@@ -99,6 +114,7 @@ module Langfuse
     # Create a child generation
     def generation(name: nil, start_time: nil, end_time: nil, completion_start_time: nil,
                    model: nil, model_parameters: nil, input: nil, output: nil, usage: nil,
+                   usage_details: nil, cost_details: nil, prompt: nil,
                    metadata: nil, level: nil, status_message: nil, version: nil, **kwargs)
       @client.generation(
         trace_id: @trace_id,
@@ -111,6 +127,9 @@ module Langfuse
         input: input,
         output: output,
         usage: usage,
+        usage_details: usage_details,
+        cost_details: cost_details,
+        prompt: prompt,
         metadata: metadata,
         level: level,
         status_message: status_message,
@@ -138,79 +157,11 @@ module Langfuse
       )
     end
 
-    # Convenience methods for enhanced observation types
-
-    # Create a child agent observation
-    def agent(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-              metadata: nil, level: nil, status_message: nil, version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        version: version,
-        as_type: ObservationType::AGENT,
-        **kwargs
-      )
-    end
-
-    # Create a child tool observation
-    def tool(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-             metadata: nil, level: nil, status_message: nil, version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        version: version,
-        as_type: ObservationType::TOOL,
-        **kwargs
-      )
-    end
-
-    # Create a child chain observation
-    def chain(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-              metadata: nil, level: nil, status_message: nil, version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        version: version,
-        as_type: ObservationType::CHAIN,
-        **kwargs
-      )
-    end
-
-    # Create a child retriever observation
-    def retriever(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-                  metadata: nil, level: nil, status_message: nil, version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        version: version,
-        as_type: ObservationType::RETRIEVER,
-        **kwargs
-      )
-    end
+    # Convenience methods for enhanced observation types: each is a child span
+    # with a fixed as_type. (embedding keeps its own definition because it folds
+    # model/usage into metadata first.)
+    extend SpanWrappers
+    define_span_wrappers
 
     # Create a child embedding observation
     def embedding(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
@@ -230,42 +181,6 @@ module Langfuse
         status_message: status_message,
         version: version,
         as_type: ObservationType::EMBEDDING,
-        **kwargs
-      )
-    end
-
-    # Create a child evaluator observation
-    def evaluator(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-                  metadata: nil, level: nil, status_message: nil, version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        version: version,
-        as_type: ObservationType::EVALUATOR,
-        **kwargs
-      )
-    end
-
-    # Create a child guardrail observation
-    def guardrail(name: nil, start_time: nil, end_time: nil, input: nil, output: nil,
-                  metadata: nil, level: nil, status_message: nil, version: nil, **kwargs)
-      span(
-        name: name,
-        start_time: start_time,
-        end_time: end_time,
-        input: input,
-        output: output,
-        metadata: metadata,
-        level: level,
-        status_message: status_message,
-        version: version,
-        as_type: ObservationType::GUARDRAIL,
         **kwargs
       )
     end
@@ -345,7 +260,7 @@ module Langfuse
     end
 
     def update_generation
-      @client.enqueue_event('generation-update', to_dict)
+      @client.enqueue_event('generation-update', update_body)
     end
   end
 end

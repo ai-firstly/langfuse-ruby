@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`Langfuse.trace` executed the block twice**: an exception raised inside the block was caught by the method-level `rescue` and the block was re-run with a `NullTrace` — duplicating LLM calls and their cost. Only trace creation degrades to `NullTrace` now; exceptions from the block propagate untouched
+- **Typed API errors collapsed into `APIError`**: `AuthenticationError` / `RateLimitError` / `ValidationError` raised by `handle_response` were re-wrapped by the generic `rescue` in `#request`, so callers could not rescue them selectively
+- **`Langfuse.configure` values for `timeout` / `retries` were ignored**: the `Client#initialize` defaults (30 / 3) shadowed the configured values
+- **OTel mode dropped token usage**: only `promptTokens` / `completionTokens` were mapped. All legacy shapes (`promptTokens`, `inputTokens`, `input`) now map to `gen_ai.usage.*` and are normalized into `langfuse.observation.usage_details`, which is what Langfuse v4 uses for cost. Usage carrying a non-token `unit` is skipped instead of being reported as tokens
+- **OTel mode produced duplicate observations**: the `*-create` and `*-update` events of one observation were exported as two spans sharing a span id, which the append-only v4 data model stores twice. They are collapsed into one span carrying the final state
+- **OTel mode stringified structured attributes**: hashes and arrays (for example `model_parameters[:tools]`) were sent through Ruby's `inspect`; they are JSON-encoded now
+- **OTel export leaked raw Faraday errors**: failures on the OTLP connection now surface as `TimeoutError` / `NetworkError` / `APIError`, matching the ingestion API path
+- **`shutdown` killed the flush thread mid-send**: events already drained from the queue were lost. The thread is now signalled to stop and joined (5 s grace period, kill only as a fallback)
+- **Flush thread was not fork-safe**: after `fork` (e.g. Puma workers) the child inherited a dead thread and the parent's queued events. Each process now recreates its own flush thread and drops inherited events instead of sending them twice
+- **Permanently failing batches were re-queued forever**: a 4xx (validation/auth) failure re-queued the same events on every flush, blocking the queue. They are now dropped with a warning; transient failures (5xx, network) are still re-queued
+- **Event queue races**: enqueue, the `trace-update` → `trace-create` merge, and the flush drain ran without a shared lock, so a concurrent flush could interleave with a merge. They are serialized by a queue mutex now
+- **Prompt compilation re-expanded placeholders coming from variable values**: variables were substituted one after another, so a value containing `{{other_var}}` was expanded by a later round (user input could inject template syntax, and the result depended on hash order). All variables are now substituted in a single pass, and a value containing a placeholder stays literal
+- **`Span#generation` and `Generation#generation` dropped `usage_details`, `cost_details` and `prompt`**: the parameters were missing from both signatures, so a generation created under a span or another generation silently lost its v4 cost data and prompt link (only `Trace#generation` forwarded them)
+- **Retries hit non-retryable failures**: `#request` retried every error, so a 401 or a 422 was sent four times before failing. Only timeouts, network errors, 429 and 5xx are retried now
+- **Retries ignored `Retry-After`**: a rate-limited request was retried on a fixed 1 s / 2 s / 3 s schedule regardless of the server's instruction, and all clients retried in lockstep because the delay carried no jitter
+- **`Langfuse.get_prompt` retried twice over**: its own retry loop wrapped the HTTP layer's retries, so one call could issue up to nine requests (and a missing prompt was fetched three times before returning `nil`). Retries now happen in one place
+- **An unknown `ingestion_mode` silently behaved like `:legacy`**: a typo such as `LANGFUSE_INGESTION_MODE=otlp` looked like a working v4 setup. The value is now normalized (`"OTEL"` → `:otel`) and validated, with a warning when it is not recognized
+- **A flushed `trace-update` sent unprocessed `to_dict` output**: when the matching `trace-create` was already gone from the queue, the reconstructed body used symbol/snake_case keys and skipped environment injection and the `mask` callable, so the API could reject the event and PII could leave unredacted. The reconstruction now re-runs the same prepare/env/mask path as every other enqueue
+
+### Added
+- OTLP payloads are chunked to the 3.5 MB batch limit (previously only the ingestion API path was chunked)
+- OTLP `partialSuccess` responses (HTTP 200 with rejected spans) are logged as warnings instead of silently losing data
+- `max_queue_size` config (constructor / `Langfuse.configure` / `LANGFUSE_MAX_QUEUE_SIZE`, default 10,000): the event queue is bounded; when full, the oldest events are dropped with a rate-limited warning instead of growing memory without bound
+- `get_prompt` resilience: when a refetch fails, the expired cache entry is served with a warning instead of raising (a Langfuse outage no longer breaks prompt resolution for previously fetched prompts). The prompt cache is now bounded (200 entries) and measures TTLs on the monotonic clock, so wall-clock jumps cannot extend or shorten entry lifetimes
+- `Client#inspect` redacts the secret key, keeping it out of logs and console output
+- `http_adapter` config (constructor / `Langfuse.configure`): selects the Faraday adapter, so a connection-pooling adapter such as `:net_http_persistent` can be used to keep the TLS connection alive between flushes. Defaults to Faraday's default adapter; an adapter whose gem is missing logs a warning and falls back instead of raising
+
+### Changed
+- Retries are now applied only to transient failures (`TimeoutError`, `NetworkError`, `RateLimitError`, 5xx `APIError`), honor `Retry-After` (seconds or HTTP date, capped at 10 s), and otherwise back off exponentially from 0.5 s with ±50% jitter, capped at 10 s. `retries:` can be overridden per request
+- Ingestion batches are serialized to JSON once and posted as a pre-encoded body; the per-event chunking path only runs when the batch exceeds the 3.5 MB limit (previously every batch was measured event by event and then re-encoded by Faraday)
+- `*-update` events send only the fields that actually changed, plus the identifying ones, instead of the observation's full body. Ending a long generation no longer re-uploads its input and model parameters
+- Enhanced observation wrappers (`agent`, `tool`, `chain`, `retriever`, `evaluator`, `guardrail`) are generated once in the new `Langfuse::SpanWrappers` module and shared by `Client`, `Trace`, `Span` and `Generation`, replacing 24 hand-written copies (~400 lines); an explicit `as_type:` passed by the caller no longer overrides the wrapper's type
+- `Client#evaluator` is available as an alias of `Client#evaluator_obs`, so the helper has the same name as `Trace#evaluator` / `Span#evaluator` / `Generation#evaluator` (both names keep working)
+- Placeholder compilation and variable extraction moved into the new `Langfuse::TemplateCompiler`, shared by `Prompt`, `PromptTemplate` and `ChatPromptTemplate` (previously four copies of the substitution loop and three of the variable scanner)
+- `Trace`, `Span` and `Event` now serialize through `to_dict` when enqueuing `*-create` / `*-update` events instead of rebuilding the same hash in each method, so a field can no longer be added to one path and forgotten in the others
+- `Utils.deep_stringify_keys` is now an alias of `Utils.deep_camelize_keys`: the two implementations were identical, and both camelize keys rather than only stringifying them
+
 ## [0.2.0] - 2026-07-18
 
 ### Added

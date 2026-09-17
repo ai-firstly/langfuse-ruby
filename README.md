@@ -103,6 +103,14 @@ All existing tracing APIs work unchanged. The SDK maps Langfuse events to
 OpenTelemetry spans with the appropriate `langfuse.*` and `gen_ai.*` attributes.
 No additional dependencies are required.
 
+Because the v4 data model is append-only, the `*-create` and `*-update` events of
+one observation are collapsed into a single span before export — sending both
+would store the observation twice. Token usage is mapped to both the
+`gen_ai.usage.*` conventions and `langfuse.observation.usage_details` (what v4
+uses for cost), accepting every legacy `usage` shape (`promptTokens`,
+`inputTokens`, `input`). OTLP payloads are chunked to the batch size limit, and
+`partialSuccess` responses are logged as warnings.
+
 **Scores in OTel mode:** scores are not part of the OTLP trace mapping. The SDK
 always sends them through the ingestion API (`/api/public/ingestion`) as
 `score-create` events, and normalizes `trace_id` / `observation_id` to W3C hex
@@ -320,6 +328,11 @@ puts compiled
 
 > **Note**: Prompt names containing special characters (like `/`, spaces, `?`, etc.) are automatically URL-encoded. You don't need to manually encode them.
 
+Fetched prompts are cached per client for `cache_ttl_seconds` (default 60). The
+cache is bounded (200 entries), TTLs use a monotonic clock, and if a refetch
+fails while an expired entry exists, the stale copy is served with a warning —
+a Langfuse outage does not break prompt resolution for prompts seen before.
+
 ### Create Prompts
 
 ```ruby
@@ -470,12 +483,23 @@ as `flush_at` events are queued (default 15, env `LANGFUSE_FLUSH_AT`). Batches
 are automatically split to respect the 3.5 MB ingestion API limit, and a
 process-wide `at_exit` hook flushes pending events on shutdown.
 
+The queue is bounded by `max_queue_size` (default 10,000, env
+`LANGFUSE_MAX_QUEUE_SIZE`): while Langfuse is unreachable the oldest events are
+dropped with a warning instead of growing memory without bound, and batches
+that fail with a permanent error (4xx) are dropped rather than retried forever.
+`shutdown` lets the flush thread finish its current send before returning, and
+after a `fork` (e.g. Puma workers) each process recreates its own flush thread.
+
+`update` and `end` send only the fields you changed, so ending a generation does
+not re-upload its prompt, input or model parameters.
+
 ```ruby
 client = Langfuse.new(
   public_key: "pk-lf-...",
   secret_key: "sk-lf-...",
   flush_at: 50,           # flush after 50 events
   flush_interval: 10,     # or every 10 seconds
+  max_queue_size: 20_000, # drop the oldest events beyond this many queued
   shutdown_on_exit: true  # flush on process exit (default)
 )
 ```
@@ -562,13 +586,41 @@ client = Langfuse.new(
   retries: 3,           # Number of retry attempts
   flush_interval: 30,   # Event flush interval in seconds (default: 5)
   flush_at: 50,         # Flush once this many events are queued (default: 15)
+  max_queue_size: 10_000, # Drop the oldest events beyond this many queued (default: 10_000)
   auto_flush: true,     # Enable automatic flushing (default: true)
   environment: "prod",  # Tracing environment (or LANGFUSE_TRACING_ENVIRONMENT)
   sample_rate: 0.5,     # Keep 50% of traces deterministically (or LANGFUSE_SAMPLE_RATE)
   mask: ->(v) { v },    # Callable applied to input/output/metadata
-  shutdown_on_exit: true # Flush pending events on process exit (default: true)
+  shutdown_on_exit: true, # Flush pending events on process exit (default: true)
+  http_adapter: :net_http_persistent # Faraday adapter (default: Faraday's default)
 )
 ```
+
+### Retries
+
+Timeouts, network errors, `429` and `5xx` responses are retried up to `retries`
+times (default 3). A `Retry-After` header is honored (seconds or HTTP date,
+capped at 10 s); otherwise the delay grows exponentially from 0.5 s with ±50%
+jitter, so many processes do not retry in lockstep. Client errors such as `401`
+and `422` are not retried, since repeating them cannot help.
+
+### Connection reuse
+
+By default every request opens a new TLS connection. To keep connections alive
+between flushes, add a pooling adapter to your `Gemfile` and select it with
+`http_adapter`:
+
+```ruby
+# Gemfile
+gem "faraday-net_http_persistent"
+
+Langfuse.configure do |config|
+  config.http_adapter = :net_http_persistent
+end
+```
+
+If the adapter is not available, the client logs a warning and falls back to
+Faraday's default adapter instead of raising.
 
 ### Environment Variables
 
@@ -580,6 +632,7 @@ export LANGFUSE_SECRET_KEY="sk-lf-..."
 export LANGFUSE_HOST="https://cloud.langfuse.com"   # or LANGFUSE_BASE_URL
 export LANGFUSE_FLUSH_INTERVAL=5
 export LANGFUSE_FLUSH_AT=15
+export LANGFUSE_MAX_QUEUE_SIZE=10000
 export LANGFUSE_AUTO_FLUSH=true
 export LANGFUSE_TRACING_ENVIRONMENT="production"
 export LANGFUSE_SAMPLE_RATE=0.5

@@ -33,25 +33,38 @@ module Langfuse
         ERB::Util.url_encode(string.to_s)
       end
 
-      def deep_symbolize_keys(hash)
-        return hash unless hash.is_a?(Hash)
-
-        hash.each_with_object({}) do |(key, value), result|
-          new_key = key.is_a?(String) ? key.to_sym : key
-          new_value = value.is_a?(Hash) ? deep_symbolize_keys(value) : value
-          result[new_key] = new_value
+      def deep_symbolize_keys(object)
+        case object
+        when Hash
+          object.each_with_object({}) do |(key, value), result|
+            new_key = key.is_a?(String) ? key.to_sym : key
+            result[new_key] = deep_symbolize_keys(value)
+          end
+        when Array
+          object.map { |item| deep_symbolize_keys(item) }
+        else
+          object
         end
       end
 
-      def deep_stringify_keys(hash)
-        return hash unless hash.is_a?(Hash)
-
-        hash.each_with_object({}) do |(key, value), result|
-          new_key = camelize_key(key.to_s)
-          new_value = value.is_a?(Hash) ? deep_stringify_keys(value) : value
-          result[new_key] = new_value
+      # 将哈希的键名转换为小驼峰格式
+      def deep_camelize_keys(object)
+        case object
+        when Hash
+          object.each_with_object({}) do |(key, value), result|
+            new_key = camelize_key(key.to_s)
+            result[new_key] = deep_camelize_keys(value)
+          end
+        when Array
+          object.map { |item| deep_camelize_keys(item) }
+        else
+          object
         end
       end
+
+      # Kept for backwards compatibility: it has always camelized keys rather
+      # than only stringifying them.
+      alias deep_stringify_keys deep_camelize_keys
 
       # Prepare an event body for the ingestion API:
       # - top-level keys are camelized (snake_case -> camelCase)
@@ -64,21 +77,10 @@ module Langfuse
         body.each_with_object({}) do |(key, value), result|
           new_key = camelize_key(key.to_s)
           result[new_key] = if !VERBATIM_BODY_KEYS.include?(new_key) && value.is_a?(Hash)
-                              deep_stringify_keys(value)
+                              deep_camelize_keys(value)
                             else
                               value
                             end
-        end
-      end
-
-      # 将哈希的键名转换为小驼峰格式
-      def deep_camelize_keys(hash)
-        return hash unless hash.is_a?(Hash)
-
-        hash.each_with_object({}) do |(key, value), result|
-          new_key = camelize_key(key.to_s)
-          new_value = value.is_a?(Hash) ? deep_camelize_keys(value) : value
-          result[new_key] = new_value
         end
       end
 

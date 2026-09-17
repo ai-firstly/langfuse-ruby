@@ -144,6 +144,13 @@ RSpec.describe 'Enhanced Observation Types' do
       expect(evaluator.as_type).to eq('evaluator')
     end
 
+    it 'exposes the evaluator observation under the Trace/Span name too' do
+      evaluator = client.evaluator(trace_id: 'test_trace', name: 'hallucination_check')
+
+      expect(evaluator).to be_a(Langfuse::Span)
+      expect(evaluator.as_type).to eq('evaluator')
+    end
+
     it 'creates a guardrail observation' do
       guardrail = client.guardrail(
         trace_id: 'test_trace',
@@ -166,6 +173,13 @@ RSpec.describe 'Enhanced Observation Types' do
       expect(agent).to be_a(Langfuse::Span)
       expect(agent.as_type).to eq('agent')
       expect(agent.trace_id).to eq(trace.id)
+    end
+
+    it 'forwards parent_observation_id and extra fields' do
+      agent = trace.agent(name: 'my_agent', parent_observation_id: 'parent-1', level: 'DEBUG')
+
+      expect(agent.parent_observation_id).to eq('parent-1')
+      expect(agent.level).to eq('DEBUG')
     end
 
     it 'creates a child tool from trace' do

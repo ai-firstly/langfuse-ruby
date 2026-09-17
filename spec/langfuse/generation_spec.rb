@@ -200,6 +200,120 @@ RSpec.describe Langfuse::Generation do
       expect(child_gen.name).to eq('child-gen')
       expect(child_gen.model).to eq('gpt-3.5-turbo')
     end
+
+    it 'forwards usage_details, cost_details and prompt to the child' do
+      child_gen = generation.generation(
+        name: 'child-gen',
+        model: 'gpt-4',
+        usage_details: { input: 10, output: 5 },
+        cost_details: { input: 0.001 },
+        prompt: { name: 'my-prompt', version: 3 }
+      )
+
+      expect(child_gen.usage_details).to eq({ input: 10, output: 5 })
+      expect(child_gen.cost_details).to eq({ input: 0.001 })
+      expect(child_gen.prompt_name).to eq('my-prompt')
+      expect(child_gen.prompt_version).to eq(3)
+    end
+  end
+
+  describe 'partial update bodies' do
+    let(:generation) do
+      client.generation(
+        trace_id: 'trace-1',
+        name: 'gen',
+        model: 'gpt-4',
+        input: [{ role: 'user', content: 'a very long prompt' }]
+      )
+    end
+
+    it 'sends only the changed fields when ending a generation' do
+      generation # created with the full body before the update is captured
+      captured = nil
+      allow(client).to receive(:enqueue_event) { |_type, body| captured = body }
+
+      generation.end(output: 'done', usage: { prompt_tokens: 10 })
+
+      expect(captured.keys).to contain_exactly(:id, :trace_id, :end_time, :output, :usage)
+      expect(captured[:usage]).to eq({ prompt_tokens: 10 })
+    end
+
+    it 'sends only the changed fields on update, including the prompt link' do
+      generation
+      captured = nil
+      allow(client).to receive(:enqueue_event) { |_type, body| captured = body }
+
+      generation.update(level: 'WARNING', prompt: { name: 'my-prompt', version: 2 })
+
+      expect(captured.keys).to contain_exactly(:id, :trace_id, :level, :prompt_name, :prompt_version)
+      expect(captured[:prompt_name]).to eq('my-prompt')
+    end
+
+    it 'keeps the full body for the create event' do
+      expect(client).to receive(:enqueue_event).with('generation-create', hash_including(:input, :model))
+
+      generation
+    end
+
+    # Guards against a keyword being added to #update without being tracked as a
+    # change, which would silently drop it from the update body.
+    it 'tracks every keyword that update accepts' do
+      generation
+      captured = nil
+      allow(client).to receive(:enqueue_event) { |_type, body| captured = body }
+
+      generation.update(
+        name: 'n', end_time: 'e', completion_start_time: 'c', model: 'm',
+        model_parameters: { a: 1 }, input: 'i', output: 'o', usage: { total: 1 },
+        usage_details: { input: 1 }, cost_details: { input: 0.1 }, metadata: { k: 'v' },
+        level: 'DEBUG', status_message: 's', version: '1'
+      )
+
+      keywords = Langfuse::Generation.instance_method(:update).parameters
+                                     .filter_map { |kind, name| name if kind == :key } - [:prompt]
+      expect(captured.keys).to include(*keywords)
+    end
+
+    it 'preserves boolean false for output without dropping it' do
+      generation
+      captured = nil
+      allow(client).to receive(:enqueue_event) { |_type, body| captured = body }
+
+      generation.end(output: false)
+
+      expect(generation.output).to be(false)
+      expect(captured[:output]).to be(false)
+    end
+
+    it 'sends only identity fields when update is called with no changes' do
+      generation
+      captured = nil
+      allow(client).to receive(:enqueue_event) { |_type, body| captured = body }
+
+      generation.update
+
+      expect(captured.keys).to contain_exactly(:id, :trace_id)
+    end
+  end
+
+  describe 'generations created from a span parent' do
+    let(:span) { client.span(trace_id: 'trace-1', name: 'parent-span') }
+
+    it 'forwards usage_details, cost_details and prompt to the child' do
+      child_gen = span.generation(
+        name: 'child-gen',
+        model: 'gpt-4',
+        usage_details: { input: 20, output: 7 },
+        cost_details: { output: 0.002 },
+        prompt: { name: 'span-prompt', version: 1 }
+      )
+
+      expect(child_gen.parent_observation_id).to eq(span.id)
+      expect(child_gen.usage_details).to eq({ input: 20, output: 7 })
+      expect(child_gen.cost_details).to eq({ output: 0.002 })
+      expect(child_gen.prompt_name).to eq('span-prompt')
+      expect(child_gen.prompt_version).to eq(1)
+    end
   end
 
   describe '#event' do

@@ -328,10 +328,12 @@ RSpec.describe 'Langfuse Phase 0 features' do
         auto_flush: true, shutdown_on_exit: false
       )
       thread = shutdown_client.instance_variable_get(:@flush_thread)
-      expect(thread).to receive(:kill).once
 
       shutdown_client.shutdown
       shutdown_client.shutdown
+
+      expect(thread).not_to be_alive
+      expect(shutdown_client.instance_variable_get(:@flush_thread)).to be_nil
     end
   end
 

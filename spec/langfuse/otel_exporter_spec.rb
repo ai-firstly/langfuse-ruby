@@ -172,6 +172,148 @@ RSpec.describe Langfuse::OtelExporter do
     end
   end
 
+  describe 'generation usage mapping' do
+    def generation_event(body_overrides, type: 'generation-create')
+      {
+        id: 'evt-1',
+        type: type,
+        timestamp: '2025-01-01T00:00:00.000Z',
+        body: {
+          'id' => 'gen-1111-2222-3333-444444444444',
+          'traceId' => 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          'name' => 'openai-call',
+          'model' => 'gpt-4',
+          'startTime' => '2025-01-01T00:00:01.000Z'
+        }.merge(body_overrides)
+      }
+    end
+
+    def generation_attrs(body_overrides)
+      payload = capture_payload([generation_event(body_overrides)])
+      attrs_to_hash(payload[:resourceSpans][0][:scopeSpans][0][:spans][0][:attributes])
+    end
+
+    it 'maps the legacy input/output/total usage shape' do
+      attrs = generation_attrs('usage' => { 'input' => 10, 'output' => 5, 'total' => 15, 'unit' => 'TOKENS' })
+
+      expect(attrs['gen_ai.usage.prompt_tokens']).to eq(10)
+      expect(attrs['gen_ai.usage.completion_tokens']).to eq(5)
+      expect(attrs['gen_ai.usage.total_tokens']).to eq(15)
+    end
+
+    it 'maps the inputTokens/outputTokens usage shape' do
+      attrs = generation_attrs('usage' => { 'inputTokens' => 7, 'outputTokens' => 2 })
+
+      expect(attrs['gen_ai.usage.prompt_tokens']).to eq(7)
+      expect(attrs['gen_ai.usage.completion_tokens']).to eq(2)
+    end
+
+    it 'synthesizes usage_details from a legacy usage object' do
+      attrs = generation_attrs('usage' => { 'promptTokens' => 10, 'completionTokens' => 5, 'totalTokens' => 15 })
+
+      expect(JSON.parse(attrs['langfuse.observation.usage_details']))
+        .to eq({ 'input' => 10, 'output' => 5, 'total' => 15 })
+    end
+
+    it 'keeps an explicit usage_details over the synthesized one' do
+      attrs = generation_attrs(
+        'usage' => { 'input' => 10 },
+        'usageDetails' => { 'input' => 99, 'cache_read_input_tokens' => 3 }
+      )
+
+      expect(JSON.parse(attrs['langfuse.observation.usage_details']))
+        .to eq({ 'input' => 99, 'cache_read_input_tokens' => 3 })
+    end
+
+    it 'skips usage measured in a non-token unit' do
+      attrs = generation_attrs('usage' => { 'input' => 100, 'unit' => 'CHARACTERS' })
+
+      expect(attrs).not_to have_key('gen_ai.usage.prompt_tokens')
+      expect(attrs).not_to have_key('langfuse.observation.usage_details')
+    end
+
+    it 'JSON-encodes structured model parameters' do
+      attrs = generation_attrs('modelParameters' => { 'temperature' => 0.7, 'tools' => [{ 'name' => 'search' }] })
+
+      expect(attrs['gen_ai.request.temperature']).to eq(0.7)
+      expect(JSON.parse(attrs['gen_ai.request.tools'])).to eq([{ 'name' => 'search' }])
+    end
+  end
+
+  describe 'observation create/update collapsing' do
+    let(:create_event) do
+      {
+        id: 'evt-1',
+        type: 'generation-create',
+        timestamp: '2025-01-01T00:00:00.000Z',
+        body: {
+          'id' => 'gen-1111-2222-3333-444444444444',
+          'traceId' => 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          'name' => 'openai-call',
+          'input' => 'question',
+          'startTime' => '2025-01-01T00:00:01.000Z'
+        }
+      }
+    end
+
+    let(:update_event) do
+      {
+        id: 'evt-2',
+        type: 'generation-update',
+        timestamp: '2025-01-01T00:00:02.000Z',
+        body: create_event[:body].merge(
+          'output' => 'answer',
+          'endTime' => '2025-01-01T00:00:02.000Z'
+        )
+      }
+    end
+
+    it 'exports a single span carrying the final state' do
+      payload = capture_payload([create_event, update_event])
+      spans = payload[:resourceSpans][0][:scopeSpans][0][:spans]
+
+      expect(spans.length).to eq(1)
+      expect(spans[0][:endTimeUnixNano]).not_to eq(spans[0][:startTimeUnixNano])
+
+      attrs = attrs_to_hash(spans[0][:attributes])
+      expect(attrs['langfuse.observation.input']).to eq('question')
+      expect(attrs['langfuse.observation.output']).to eq('answer')
+    end
+
+    it 'leaves the queued events untouched so they can be re-queued' do
+      capture_payload([create_event, update_event])
+
+      expect(create_event[:type]).to eq('generation-create')
+      expect(create_event[:body]).not_to have_key('output')
+    end
+
+    it 'keeps distinct observations as separate spans' do
+      other = update_event.merge(
+        body: update_event[:body].merge('id' => 'gen-9999-8888-7777-666666666666')
+      )
+
+      payload = capture_payload([create_event, other])
+      spans = payload[:resourceSpans][0][:scopeSpans][0][:spans]
+
+      expect(spans.length).to eq(2)
+      expect(spans.map { |span| span[:spanId] }.uniq.length).to eq(2)
+    end
+
+    it 'does not collapse trace or event observations' do
+      trace_event = {
+        id: 'evt-3',
+        type: 'trace-create',
+        timestamp: '2025-01-01T00:00:00.000Z',
+        body: { 'id' => 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'name' => 'my-trace' }
+      }
+
+      payload = capture_payload([trace_event, create_event, update_event])
+      spans = payload[:resourceSpans][0][:scopeSpans][0][:spans]
+
+      expect(spans.length).to eq(2)
+    end
+  end
+
   describe 'event conversion' do
     it 'converts event-create to zero-duration OTEL span' do
       events = [

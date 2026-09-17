@@ -64,7 +64,7 @@ module Langfuse
       # Convert text prompt to LangChain PromptTemplate format
       {
         _type: 'prompt',
-        input_variables: extract_variables(@prompt),
+        input_variables: TemplateCompiler.extract_variables(@prompt),
         template: @prompt
       }
     end
@@ -75,7 +75,7 @@ module Langfuse
         {
           _type: "#{message[:role]}_message",
           content: message[:content],
-          input_variables: extract_variables(message[:content])
+          input_variables: TemplateCompiler.extract_variables(message[:content])
         }
       end
 
@@ -87,44 +87,11 @@ module Langfuse
     end
 
     def compile_text_prompt(variables)
-      compiled = @prompt.dup
-      variables.each do |key, value|
-        compiled.gsub!("{{#{key}}}", value.to_s)
-        compiled.gsub!("{#{key}}", value.to_s)
-      end
-      compiled
+      TemplateCompiler.compile(@prompt, variables)
     end
 
     def compile_chat_prompt(variables)
-      @prompt.map do |message|
-        compiled_content = message[:content].dup
-        variables.each do |key, value|
-          compiled_content.gsub!("{{#{key}}}", value.to_s)
-          compiled_content.gsub!("{#{key}}", value.to_s)
-        end
-
-        {
-          role: message[:role],
-          content: compiled_content
-        }
-      end
-    end
-
-    def extract_variables(text)
-      # Extract variables from template text (supports {{var}} and {var} formats)
-      variables = []
-
-      # Match {{variable}} format
-      text.scan(/\{\{(\w+)\}\}/) do |match|
-        variables << match[0]
-      end
-
-      # Match {variable} format
-      text.scan(/\{(\w+)\}/) do |match|
-        variables << match[0] unless variables.include?(match[0])
-      end
-
-      variables
+      TemplateCompiler.compile_messages(@prompt, variables)
     end
   end
 
@@ -137,33 +104,15 @@ module Langfuse
     end
 
     def format(variables = {})
-      compiled = @template.dup
-      variables.each do |key, value|
-        compiled.gsub!("{{#{key}}}", value.to_s)
-        compiled.gsub!("{#{key}}", value.to_s)
-      end
-      compiled
+      TemplateCompiler.compile(@template, variables)
     end
 
     def self.from_template(template)
-      variables = extract_variables(template)
-      new(template: template, input_variables: variables)
+      new(template: template, input_variables: extract_variables(template))
     end
 
     def self.extract_variables(text)
-      variables = []
-
-      # Match {{variable}} format
-      text.scan(/\{\{(\w+)\}\}/) do |match|
-        variables << match[0]
-      end
-
-      # Match {variable} format
-      text.scan(/\{(\w+)\}/) do |match|
-        variables << match[0] unless variables.include?(match[0])
-      end
-
-      variables
+      TemplateCompiler.extract_variables(text)
     end
   end
 
@@ -176,34 +125,11 @@ module Langfuse
     end
 
     def format(variables = {})
-      @messages.map do |message|
-        compiled_content = message[:content].dup
-        variables.each do |key, value|
-          compiled_content.gsub!("{{#{key}}}", value.to_s)
-          compiled_content.gsub!("{#{key}}", value.to_s)
-        end
-
-        {
-          role: message[:role],
-          content: compiled_content
-        }
-      end
+      TemplateCompiler.compile_messages(@messages, variables)
     end
 
     def self.from_messages(messages)
-      input_variables = []
-
-      messages.each do |message|
-        message[:content].scan(/\{\{(\w+)\}\}/) do |match|
-          input_variables << match[0] unless input_variables.include?(match[0])
-        end
-
-        message[:content].scan(/\{(\w+)\}/) do |match|
-          input_variables << match[0] unless input_variables.include?(match[0])
-        end
-      end
-
-      new(messages: messages, input_variables: input_variables)
+      new(messages: messages, input_variables: TemplateCompiler.extract_message_variables(messages))
     end
   end
 end

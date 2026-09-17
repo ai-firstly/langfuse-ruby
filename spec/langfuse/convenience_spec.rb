@@ -117,6 +117,33 @@ RSpec.describe 'Langfuse convenience methods' do
           end
         end.to raise_error('test error')
       end
+
+      it 'runs the block only once when it raises' do
+        calls = 0
+
+        expect do
+          Langfuse.trace('test-trace') do |_trace|
+            calls += 1
+            raise 'test error'
+          end
+        end.to raise_error('test error')
+
+        expect(calls).to eq(1)
+      end
+
+      it 'yields a NullTrace and runs the block once when trace creation fails' do
+        allow(Langfuse.client).to receive(:trace).and_raise(StandardError, 'creation failed')
+        yielded = []
+
+        result = Langfuse.trace('test-trace') do |trace|
+          yielded << trace
+          'block result'
+        end
+
+        expect(result).to eq('block result')
+        expect(yielded.length).to eq(1)
+        expect(yielded.first).to be_a(Langfuse::NullTrace)
+      end
     end
   end
 
@@ -209,6 +236,11 @@ RSpec.describe 'Langfuse null objects' do
 
     it 'returns NullSpan for span' do
       expect(null_span.span(name: 'test')).to be_a(Langfuse::NullSpan)
+    end
+
+    it 'responds to evaluator_obs and returns NullSpan' do
+      expect(null_span.evaluator_obs(name: 'eval')).to be_a(Langfuse::NullSpan)
+      expect(null_span.trace_id).to be_nil
     end
   end
 end

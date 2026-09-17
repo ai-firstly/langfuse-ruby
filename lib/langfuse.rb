@@ -2,12 +2,16 @@
 
 require_relative 'langfuse/version'
 require_relative 'langfuse/observation_types'
+require_relative 'langfuse/span_wrappers'
+require_relative 'langfuse/partial_updates'
+require_relative 'langfuse/template_compiler'
 require_relative 'langfuse/client'
 require_relative 'langfuse/trace'
 require_relative 'langfuse/span'
 require_relative 'langfuse/generation'
 require_relative 'langfuse/event'
 require_relative 'langfuse/prompt'
+require_relative 'langfuse/prompt_cache'
 require_relative 'langfuse/evaluation'
 require_relative 'langfuse/errors'
 require_relative 'langfuse/utils'
@@ -47,29 +51,23 @@ module Langfuse
     # @param cache_ttl_seconds [Integer] cache TTL in seconds (default: 60)
     # @param retries [Integer] number of retries on failure (default: 2)
     # @return [String, Prompt, nil] compiled prompt string if variables provided, Prompt object otherwise, nil on failure
+    # `retries` is applied inside the HTTP layer, which retries only transient
+    # failures (timeout, network, 429, 5xx), honors Retry-After and backs off with
+    # jitter. A missing prompt therefore fails immediately instead of being
+    # requested three times.
     def get_prompt(prompt_name, variables: nil, label: nil, version: nil, cache_ttl_seconds: 60, retries: 2)
-      attempts = 0
+      prompt = client.get_prompt(
+        prompt_name,
+        label: label,
+        version: version,
+        cache_ttl_seconds: cache_ttl_seconds,
+        retries: retries
+      )
 
-      begin
-        attempts += 1
-        prompt = client.get_prompt(prompt_name, label: label, version: version, cache_ttl_seconds: cache_ttl_seconds)
-
-        if variables
-          prompt.compile(variables)
-        else
-          prompt
-        end
-      rescue StandardError => e
-        if attempts <= retries
-          sleep_time = (2**(attempts - 1)) * 0.1 # Exponential backoff: 0.1s, 0.2s, 0.4s...
-          warn "Langfuse prompt fetch failed (#{prompt_name}), retrying in #{sleep_time}s... (attempt #{attempts}/#{retries + 1})" if configuration.debug
-          sleep(sleep_time)
-          retry
-        end
-
-        warn "Langfuse prompt fetch failed (#{prompt_name}): #{e.message}" if configuration.debug
-        nil
-      end
+      variables ? prompt.compile(variables) : prompt
+    rescue StandardError => e
+      warn "Langfuse prompt fetch failed (#{prompt_name}): #{e.message}" if configuration.debug
+      nil
     end
 
     # Create a trace and optionally execute a block with it
@@ -103,38 +101,34 @@ module Langfuse
     #
     def trace(name = nil, user_id: nil, session_id: nil, input: nil, output: nil,
               metadata: nil, tags: nil, version: nil, release: nil, **kwargs)
-      trace = client.trace(
-        name: name,
-        user_id: user_id,
-        session_id: session_id,
-        input: input,
-        output: output,
-        metadata: metadata,
-        tags: tags,
-        version: version,
-        release: release,
-        **kwargs
-      )
-
-      if block_given?
+      # Only trace creation degrades to a NullTrace. An exception raised by the
+      # block must propagate: rescuing it here and yielding again would run the
+      # caller's block a second time (duplicate LLM calls and billing).
+      trace =
         begin
-          result = yield(trace)
-          result
-        ensure
-          flush
+          client.trace(
+            name: name,
+            user_id: user_id,
+            session_id: session_id,
+            input: input,
+            output: output,
+            metadata: metadata,
+            tags: tags,
+            version: version,
+            release: release,
+            **kwargs
+          )
+        rescue StandardError => e
+          warn "Langfuse trace creation failed: #{e.message}" if configuration.debug
+          NullTrace.new
         end
-      else
-        trace
-      end
-    rescue StandardError => e
-      warn "Langfuse trace creation failed: #{e.message}" if configuration.debug
 
-      # If block given, execute with NullTrace to ensure code continues
-      if block_given?
-        null_trace = NullTrace.new
-        yield(null_trace)
-      else
-        NullTrace.new
+      return trace unless block_given?
+
+      begin
+        yield(trace)
+      ensure
+        flush
       end
     end
 
@@ -161,7 +155,8 @@ module Langfuse
   # Configuration class for Langfuse client settings
   class Configuration
     attr_accessor :public_key, :secret_key, :host, :debug, :timeout, :retries, :flush_interval, :auto_flush,
-                  :ingestion_mode, :environment, :sample_rate, :mask, :flush_at, :logger, :shutdown_on_exit
+                  :ingestion_mode, :environment, :sample_rate, :mask, :flush_at, :max_queue_size, :logger,
+                  :shutdown_on_exit, :http_adapter
 
     def initialize
       @public_key = nil
@@ -177,8 +172,10 @@ module Langfuse
       @sample_rate = nil       # 0.0..1.0, nil disables sampling
       @mask = nil              # callable applied to input/output/metadata before sending
       @flush_at = 15           # flush as soon as this many events are queued
+      @max_queue_size = 10_000 # queue cap; the oldest events are dropped when full
       @logger = nil            # custom Logger instance
       @shutdown_on_exit = true # register an at_exit hook that flushes pending events
+      @http_adapter = nil      # Faraday adapter, e.g. :net_http_persistent for keep-alive
     end
   end
 end
